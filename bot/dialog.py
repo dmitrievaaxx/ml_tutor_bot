@@ -141,6 +141,7 @@ def get_system_prompt(level: str = None) -> str:
 def extract_user_level(chat_id: int) -> str:
     """
     Извлекает уровень знаний пользователя из истории диалога
+    Возвращает последний выбранный уровень
     
     Args:
         chat_id: ID чата в Telegram
@@ -151,8 +152,9 @@ def extract_user_level(chat_id: int) -> str:
     if chat_id not in _dialogs:
         return None
     
-    # Ищем уровень в сообщениях пользователя
-    for message in _dialogs[chat_id]:
+    # Ищем уровень в сообщениях пользователя (с конца истории)
+    # Это гарантирует, что мы получим последний выбранный уровень
+    for message in reversed(_dialogs[chat_id]):
         if message["role"] == "user":
             content = message["content"]
             if content in ['Новичок', 'Базовый', 'Продвинутый']:
@@ -305,13 +307,27 @@ def add_assistant_message(chat_id: int, message: str):
 def clear_dialog(chat_id: int):
     """
     Очистка истории диалога для начала с чистого листа
+    Сохраняет информацию о выбранном уровне знаний
     
     Args:
         chat_id: ID чата в Telegram
     """
     if chat_id in _dialogs:
+        # Сохраняем уровень пользователя перед очисткой
+        user_level = extract_user_level(chat_id)
+        
+        # Очищаем историю
         del _dialogs[chat_id]
-        logger.info(f"Очищена история для chat_id={chat_id}")
+        
+        # Если был уровень, восстанавливаем его
+        if user_level:
+            _dialogs[chat_id] = [
+                {"role": "system", "content": get_system_prompt(user_level)},
+                {"role": "user", "content": user_level}
+            ]
+            logger.info(f"Очищена история для chat_id={chat_id}, уровень '{user_level}' сохранен")
+        else:
+            logger.info(f"Очищена история для chat_id={chat_id}")
 
 
 def get_dialog_stats(chat_id: int) -> dict:
