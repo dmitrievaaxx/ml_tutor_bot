@@ -47,8 +47,8 @@ async def handle_start(message: Message):
     ])
     
     await message.answer(
-        "Привет! 👋 Рад помочь тебе разобраться в машинном обучении!\n\n"
-        "Я объясняю концепции ML простым языком, используя аналогии из жизни. 🎓\n\n"
+        "Привет!👋\n\n"
+        "Я помогу тебе разобраться в машинном обучении, нейросетях и NLP — от основ до продвинутых концепций.\n\n"
         "📊 Выбери свой уровень знаний:",
         reply_markup=keyboard
            )
@@ -80,6 +80,49 @@ async def handle_level(message: Message):
         "📊 Выбери новый уровень знаний:",
         reply_markup=keyboard
     )
+
+
+async def handle_status(message: Message):
+    """
+    Обработка команды /status
+    
+    Показывает текущий уровень знаний пользователя
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    username = message.from_user.username or "пользователь"
+    chat_id = message.chat.id
+    
+    logger.info(f"Команда /status от пользователя {user_id} (@{username})")
+    
+    # Получаем текущий уровень пользователя
+    from bot.dialog import extract_user_level
+    current_level = extract_user_level(chat_id)
+    
+    if current_level:
+        level_emojis = {
+            'Новичок': '🟢',
+            'Базовый': '🟡', 
+            'Продвинутый': '🔴'
+        }
+        emoji = level_emojis.get(current_level, '📊')
+        
+        status_message = f"{emoji} **Текущий уровень:** {current_level}\n\n"
+        
+        if current_level == 'Новичок':
+            status_message += "Ты изучаешь ML с нуля простыми словами 😊"
+        elif current_level == 'Базовый':
+            status_message += "Ты изучаешь ML с техническими деталями 📚"
+        else:  # Продвинутый
+            status_message += "Ты изучаешь продвинутые темы ML 🔬"
+        
+        status_message += "\n\nИспользуй /level чтобы изменить уровень"
+    else:
+        status_message = "📊 Уровень знаний не выбран\n\nИспользуй /start чтобы выбрать уровень"
+    
+    await message.answer(status_message)
 
 
 async def handle_clear(message: Message):
@@ -223,55 +266,34 @@ async def handle_level_selection(callback_query: CallbackQuery):
             # Определяем, первый ли это выбор уровня
             is_first = is_first_level_selection(chat_id)
             
+            # Убираем кнопки после выбора уровня
+            await callback_query.message.edit_text(
+                f"✅ Выбран уровень: {level}",
+                reply_markup=None
+            )
+            
             if is_first:
                 # Первый выбор уровня - показываем приветствие с темами
                 welcome_msg = get_welcome_message(level)
                 await callback_query.message.answer(welcome_msg)
                 add_assistant_message(chat_id, welcome_msg)
             else:
-                # Смена уровня - показываем короткое сообщение
-                await callback_query.bot.send_chat_action(chat_id=chat_id, action="typing")
-                thinking_msg = await callback_query.message.answer("🤔 Модель думает над ответом...")
-                
-                # Получаем ответ от LLM
-                response = await get_llm_response(dialog_history)
-                
-                # Проверка на пустой ответ
-                if not response or response.strip() == "" or len(response.strip()) < 10:
-                    response = f"Отлично! Теперь я буду объяснять машинное обучение на уровне '{level}'. Задавай вопросы!"
-                
-                # Очищаем ответ от форматирования
-                cleaned_response = clean_response(response)
-                logger.info(f"Ответ очищен: {len(response)} -> {len(cleaned_response)} символов")
-                
-                # Добавляем ответ в историю
-                add_assistant_message(chat_id, cleaned_response)
-                
-                # Удаляем индикатор "думает"
-                await thinking_msg.delete()
-                
-                # Отправляем ответ пользователю
-                await callback_query.message.answer(cleaned_response)
+                # Смена уровня - показываем простое сообщение без LLM
+                level_change_msg = f"✅ Уровень знаний изменен на '{level}'. Задавайте свои вопросы!"
+                await callback_query.message.answer(level_change_msg)
+                add_assistant_message(chat_id, level_change_msg)
             
             # Подтверждаем callback (убираем "часики" с кнопки)
             await callback_query.answer()
                 
         except ValueError as e:
             logger.error(f"Ошибка конфигурации: {e}")
-            try:
-                await thinking_msg.delete()
-            except:
-                pass
             await callback_query.message.answer(
                 "⚠️ Бот не настроен. Обратитесь к администратору."
             )
             await callback_query.answer()
         except Exception as e:
             logger.error(f"Ошибка при обработке выбора уровня: {type(e).__name__}: {e}")
-            try:
-                await thinking_msg.delete()
-            except:
-                pass
             await callback_query.message.answer(
                 "😔 Извините, произошла ошибка. Попробуйте еще раз."
             )
@@ -295,6 +317,9 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик команды /level - смена уровня знаний
     dp.message.register(handle_level, Command("level"))
+    
+    # Обработчик команды /status - показ текущего уровня
+    dp.message.register(handle_status, Command("status"))
     
     # Обработчик команды /clear - очистка истории диалога
     dp.message.register(handle_clear, Command("clear"))
