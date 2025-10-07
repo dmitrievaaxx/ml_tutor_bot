@@ -109,7 +109,7 @@ async def handle_status(message: Message):
         }
         emoji = level_emojis.get(current_level, '📊')
         
-        status_message = f"{emoji} **Текущий уровень:** {current_level}\n\n"
+        status_message = f"{emoji} Текущий уровень: {current_level}\n\n"
         
         if current_level == 'Новичок':
             status_message += "Ты изучаешь ML с нуля простыми словами 😊"
@@ -123,33 +123,6 @@ async def handle_status(message: Message):
         status_message = "📊 Уровень знаний не выбран\n\nИспользуй /start чтобы выбрать уровень"
     
     await message.answer(status_message)
-
-
-async def handle_clear(message: Message):
-    """
-    Обработка команды /clear
-    
-    Очищает историю диалога для начала беседы с чистого листа
-    
-    Args:
-        message: Объект сообщения от пользователя
-    """
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    
-    logger.info(f"Команда /clear от пользователя {user_id}")
-    
-    # Получение статистики перед очисткой
-    stats = get_dialog_stats(chat_id)
-    
-    # Очистка истории диалога
-    clear_dialog(chat_id)
-    
-    await message.answer(
-        f"🗑️ История диалога очищена!\n\n"
-        f"Было сообщений: {stats['user']} от вас, {stats['assistant']} от меня.\n\n"
-        f"Начнём сначала! Задавай свои вопросы о машинном обучении 😊"
-    )
 
 
 async def handle_message(message: Message):
@@ -320,9 +293,6 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик команды /status - показ текущего уровня
     dp.message.register(handle_status, Command("status"))
-    
-    # Обработчик команды /clear - очистка истории диалога
-    dp.message.register(handle_clear, Command("clear"))
     
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection)

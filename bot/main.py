@@ -34,7 +34,6 @@ async def setup_bot_commands(bot: Bot):
         BotCommand(command="start", description="🚀 Начать обучение ML"),
         BotCommand(command="level", description="📊 Сменить уровень знаний"),
         BotCommand(command="status", description="ℹ️ Показать текущий уровень"),
-        BotCommand(command="clear", description="🗑️ Очистить историю диалога"),
     ]
     
     await bot.set_my_commands(commands)
