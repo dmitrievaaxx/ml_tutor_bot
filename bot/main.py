@@ -5,6 +5,7 @@ import logging
 import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
+from aiogram.types import BotCommand
 
 from bot.handlers import register_handlers
 
@@ -20,6 +21,24 @@ def setup_logging():
         level=getattr(logging, log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+
+
+async def setup_bot_commands(bot: Bot):
+    """
+    Настройка команд бота для отображения в меню
+    
+    Args:
+        bot: Объект бота для установки команд
+    """
+    commands = [
+        BotCommand(command="start", description="🚀 Начать обучение ML"),
+        BotCommand(command="level", description="📊 Сменить уровень знаний"),
+        BotCommand(command="clear", description="🗑️ Очистить историю диалога"),
+    ]
+    
+    await bot.set_my_commands(commands)
+    logger = logging.getLogger(__name__)
+    logger.info("Команды бота настроены")
 
 
 async def main():
@@ -46,6 +65,9 @@ async def main():
     # Инициализация бота и диспетчера
     bot = Bot(token=token)
     dp = Dispatcher()
+    
+    # Настройка команд бота для отображения в меню
+    await setup_bot_commands(bot)
     
     # Регистрация обработчиков команд и сообщений
     register_handlers(dp)

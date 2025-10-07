@@ -3,9 +3,19 @@
 import logging
 from aiogram import Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 from llm.client import get_llm_response
+from bot.dialog import (
+    get_dialog_history,
+    add_user_message,
+    add_assistant_message,
+    clear_dialog,
+    get_dialog_stats,
+    clean_response,
+    is_first_level_selection,
+    get_welcome_message
+)
 
 
 logger = logging.getLogger(__name__)
@@ -15,51 +25,154 @@ async def handle_start(message: Message):
     """
     Обработка команды /start
     
-    Отправляет приветственное сообщение пользователю при первом запуске бота
+    Отправляет приветственное сообщение с кнопками выбора уровня
     
     Args:
         message: Объект сообщения от пользователя
     """
     user_id = message.from_user.id
     username = message.from_user.username or "пользователь"
+    chat_id = message.chat.id
     
     logger.info(f"Команда /start от пользователя {user_id} (@{username})")
     
-    await message.answer(
-        "Привет! 👋\n\n"
-        "Я простой эхо-бот. Отправьте мне любое сообщение, и я повторю его.\n\n"
-        "Это базовая версия, скоро я научусь большему!"
-    )
-
-
-async def handle_message(message: Message):
-    """
-    Обработка текстовых сообщений через LLM
+    # Очистка истории при старте (начинаем с чистого листа)
+    clear_dialog(chat_id)
     
-    Функция:
-    1. Получает сообщение от пользователя
-    2. Отправляет его в LLM для обработки
-    3. Возвращает ответ пользователю
-    4. Обрабатывает ошибки и логирует события
+    # Создаем кнопки для выбора уровня
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Новичок", callback_data="level_novice")],
+        [InlineKeyboardButton(text="🟡 Базовый", callback_data="level_basic")],
+        [InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")]
+    ])
+    
+    await message.answer(
+        "Привет! 👋 Рад помочь тебе разобраться в машинном обучении!\n\n"
+        "Я объясняю концепции ML простым языком, используя аналогии из жизни. 🎓\n\n"
+        "📊 Выбери свой уровень знаний:",
+        reply_markup=keyboard
+           )
+
+
+async def handle_level(message: Message):
+    """
+    Обработка команды /level
+    
+    Позволяет пользователю изменить свой уровень знаний
     
     Args:
         message: Объект сообщения от пользователя
     """
     user_id = message.from_user.id
+    username = message.from_user.username or "пользователь"
+    chat_id = message.chat.id
+    
+    logger.info(f"Команда /level от пользователя {user_id} (@{username})")
+    
+    # Создаем кнопки для выбора уровня
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Новичок", callback_data="level_novice")],
+        [InlineKeyboardButton(text="🟡 Базовый", callback_data="level_basic")],
+        [InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")]
+    ])
+    
+    await message.answer(
+        "📊 Выбери новый уровень знаний:",
+        reply_markup=keyboard
+    )
+
+
+async def handle_clear(message: Message):
+    """
+    Обработка команды /clear
+    
+    Очищает историю диалога для начала беседы с чистого листа
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    
+    logger.info(f"Команда /clear от пользователя {user_id}")
+    
+    # Получение статистики перед очисткой
+    stats = get_dialog_stats(chat_id)
+    
+    # Очистка истории диалога
+    clear_dialog(chat_id)
+    
+    await message.answer(
+        f"🗑️ История диалога очищена!\n\n"
+        f"Было сообщений: {stats['user']} от вас, {stats['assistant']} от меня.\n\n"
+        f"Начнём сначала! Задавай свои вопросы о машинном обучении 😊"
+    )
+
+
+async def handle_message(message: Message):
+    """
+    Обработка текстовых сообщений через LLM с сохранением контекста
+    
+    Функция:
+    1. Получает сообщение от пользователя
+    2. Показывает индикатор "печатает..." пока модель думает
+    3. Добавляет сообщение в историю диалога
+    4. Отправляет историю в LLM для получения контекстного ответа
+    5. Сохраняет ответ в историю
+    6. Отправляет ответ пользователю с форматированием Markdown
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    chat_id = message.chat.id
     text = message.text
     
     logger.info(f"Сообщение от пользователя {user_id}: {text}")
     
     try:
-        # Получение ответа от LLM
-        response = await get_llm_response(text)
+        # Показываем индикатор "печатает..." пока LLM думает
+        await message.bot.send_chat_action(chat_id=chat_id, action="typing")
         
-        # Отправка ответа пользователю
-        await message.answer(response)
+        # Отправляем сообщение о том, что модель думает
+        thinking_msg = await message.answer("🤔 Модель думает над ответом...")
+        
+        # Добавление сообщения пользователя в историю
+        add_user_message(chat_id, text)
+        
+        # Получение полной истории диалога
+        dialog_history = get_dialog_history(chat_id)
+        logger.info(f"История диалога получена: {len(dialog_history)} сообщений")
+        
+        # Получение ответа от LLM с учетом контекста диалога
+        logger.info("Начинаем запрос к LLM...")
+        response = await get_llm_response(dialog_history)
+        logger.info(f"Ответ от LLM получен: {len(response) if response else 0} символов")
+        
+        # Проверка на пустой ответ
+        if not response or response.strip() == "":
+            response = "Извините, я не смог сгенерировать ответ на ваш вопрос. Попробуйте переформулировать вопрос или задайте другой."
+        
+        # Очистка ответа от форматирования и иностранных слов
+        cleaned_response = clean_response(response)
+        logger.info(f"Ответ очищен: {len(response)} -> {len(cleaned_response)} символов")
+        
+        # Сохранение ответа ассистента в историю
+        add_assistant_message(chat_id, cleaned_response)
+        
+        # Удаляем сообщение "модель думает"
+        await thinking_msg.delete()
+        
+        # Отправка ответа пользователю как обычный текст без форматирования
+        await message.answer(cleaned_response)
         
     except ValueError as e:
         # Ошибка конфигурации (например, отсутствует API ключ)
         logger.error(f"Ошибка конфигурации: {e}")
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
         await message.answer(
             "⚠️ Бот не настроен. Обратитесь к администратору."
         )
@@ -67,10 +180,104 @@ async def handle_message(message: Message):
     except Exception as e:
         # Общая ошибка при обработке
         logger.error(f"Ошибка при обработке сообщения: {type(e).__name__}: {e}")
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
         await message.answer(
             "😔 Извините, произошла ошибка при обработке вашего сообщения. "
             "Попробуйте еще раз или напишите позже."
         )
+
+
+async def handle_level_selection(callback_query: CallbackQuery):
+    """
+    Обработка выбора уровня знаний через кнопки
+    
+    Args:
+        callback_query: Объект callback query от нажатия кнопки
+    """
+    chat_id = callback_query.message.chat.id
+    user_id = callback_query.from_user.id
+    username = callback_query.from_user.username or "пользователь"
+    
+    # Определяем уровень по callback_data
+    level_mapping = {
+        "level_novice": "Новичок",
+        "level_basic": "Базовый", 
+        "level_advanced": "Продвинутый"
+    }
+    
+    level = level_mapping.get(callback_query.data)
+    
+    if level:
+        logger.info(f"Выбран уровень {level} пользователем {user_id} (@{username})")
+        
+        # Добавляем сообщение о выборе уровня в историю
+        add_user_message(chat_id, level)
+        
+        # Получаем историю диалога
+        dialog_history = get_dialog_history(chat_id)
+        
+        try:
+            # Определяем, первый ли это выбор уровня
+            is_first = is_first_level_selection(chat_id)
+            
+            if is_first:
+                # Первый выбор уровня - показываем приветствие с темами
+                welcome_msg = get_welcome_message(level)
+                await callback_query.message.answer(welcome_msg)
+                add_assistant_message(chat_id, welcome_msg)
+            else:
+                # Смена уровня - показываем короткое сообщение
+                await callback_query.bot.send_chat_action(chat_id=chat_id, action="typing")
+                thinking_msg = await callback_query.message.answer("🤔 Модель думает над ответом...")
+                
+                # Получаем ответ от LLM
+                response = await get_llm_response(dialog_history)
+                
+                # Проверка на пустой ответ
+                if not response or response.strip() == "" or len(response.strip()) < 10:
+                    response = f"Отлично! Теперь я буду объяснять машинное обучение на уровне '{level}'. Задавай вопросы!"
+                
+                # Очищаем ответ от форматирования
+                cleaned_response = clean_response(response)
+                logger.info(f"Ответ очищен: {len(response)} -> {len(cleaned_response)} символов")
+                
+                # Добавляем ответ в историю
+                add_assistant_message(chat_id, cleaned_response)
+                
+                # Удаляем индикатор "думает"
+                await thinking_msg.delete()
+                
+                # Отправляем ответ пользователю
+                await callback_query.message.answer(cleaned_response)
+            
+            # Подтверждаем callback (убираем "часики" с кнопки)
+            await callback_query.answer()
+                
+        except ValueError as e:
+            logger.error(f"Ошибка конфигурации: {e}")
+            try:
+                await thinking_msg.delete()
+            except:
+                pass
+            await callback_query.message.answer(
+                "⚠️ Бот не настроен. Обратитесь к администратору."
+            )
+            await callback_query.answer()
+        except Exception as e:
+            logger.error(f"Ошибка при обработке выбора уровня: {type(e).__name__}: {e}")
+            try:
+                await thinking_msg.delete()
+            except:
+                pass
+            await callback_query.message.answer(
+                "😔 Извините, произошла ошибка. Попробуйте еще раз."
+            )
+            await callback_query.answer()
+    else:
+        await callback_query.answer("Неизвестный уровень")
 
 
 def register_handlers(dp: Dispatcher):
@@ -83,9 +290,17 @@ def register_handlers(dp: Dispatcher):
     Args:
         dp: Диспетчер aiogram для регистрации обработчиков
     """
-    # Обработчик команды /start
+    # Обработчик команды /start - приветствие и сброс диалога
     dp.message.register(handle_start, Command("start"))
     
-    # Обработчик всех остальных текстовых сообщений через LLM
+    # Обработчик команды /level - смена уровня знаний
+    dp.message.register(handle_level, Command("level"))
+    
+    # Обработчик команды /clear - очистка истории диалога
+    dp.message.register(handle_clear, Command("clear"))
+    
+    # Обработчик нажатий на кнопки выбора уровня
+    dp.callback_query.register(handle_level_selection)
+    
+    # Обработчик всех остальных текстовых сообщений через LLM с контекстом
     dp.message.register(handle_message)
-
