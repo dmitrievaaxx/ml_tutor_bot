@@ -192,27 +192,14 @@ def add_assistant_message(chat_id: int, message: str):
 def clear_dialog(chat_id: int):
     """
     Очистка истории диалога для начала с чистого листа
-    Сохраняет информацию о выбранном уровне знаний
     
     Args:
         chat_id: ID чата в Telegram
     """
     if chat_id in _dialogs:
-        # Сохраняем уровень пользователя перед очисткой
-        user_level = extract_user_level(chat_id)
-        
-        # Очищаем историю
+        # Полностью очищаем историю
         del _dialogs[chat_id]
-        
-        # Если был уровень, восстанавливаем его
-        if user_level:
-            _dialogs[chat_id] = [
-                {"role": "system", "content": get_system_prompt(user_level)},
-                {"role": "user", "content": user_level}
-            ]
-            logger.info(f"Очищена история для chat_id={chat_id}, уровень '{user_level}' сохранен")
-        else:
-            logger.info(f"Очищена история для chat_id={chat_id}")
+        logger.info(f"Очищена история для chat_id={chat_id}")
 
 
 def get_dialog_stats(chat_id: int) -> dict:
