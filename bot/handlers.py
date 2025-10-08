@@ -1,6 +1,7 @@
 """Обработчики команд и сообщений Telegram-бота"""
 
 import logging
+import random
 from aiogram import Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -19,6 +20,17 @@ from bot.dialog import (
 
 
 logger = logging.getLogger(__name__)
+
+# Сообщения для индикатора "модель думает"
+THINKING_MESSAGES = [
+    "⏳ Секунду...",
+    "💭 Минутку...",
+    "🔍 Ищу лучший ответ для тебя...",
+    "💭 Думаю над ответом...",
+    "💡 Формулирую понятное объяснение...",
+    "🎓 Готовлю подробный ответ...",
+    "📚 Подбираю лучшие примеры...",
+]
 
 
 async def handle_start(message: Message):
@@ -150,8 +162,8 @@ async def handle_message(message: Message):
         # Показываем индикатор "печатает..." пока LLM думает
         await message.bot.send_chat_action(chat_id=chat_id, action="typing")
         
-        # Отправляем сообщение о том, что модель думает
-        thinking_msg = await message.answer("🤔 Модель думает над ответом...")
+        # Отправляем случайное сообщение о том, что модель думает
+        thinking_msg = await message.answer(random.choice(THINKING_MESSAGES))
         
         # Добавление сообщения пользователя в историю
         add_user_message(chat_id, text)
