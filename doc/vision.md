@@ -42,7 +42,11 @@
 │
 ├── doc/
 │   ├── product_idea.md   
-│   └── vision.md         
+│   ├── vision.md   
+│   ├── conventions.md
+│   ├── tasklist.md 
+│   └── workflow.md    
+│
 ├── pyproject.toml 
 ├── Makefile 
 ├── Dockerfile 
