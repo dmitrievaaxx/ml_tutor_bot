@@ -137,6 +137,7 @@ def get_dialog_history(chat_id: int) -> list:
         
     Returns:
         list: История сообщений в формате OpenAI [{"role": "...", "content": "..."}]
+        
     """
     if chat_id not in _dialogs:
         # Инициализация нового диалога с системным промптом
