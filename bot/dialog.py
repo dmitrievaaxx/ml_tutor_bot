@@ -15,52 +15,20 @@ _dialogs = {}
 
 def clean_response(text: str) -> str:
     """
-    Очистка ответа от форматирования и иностранных символов
+    Очистка ответа от форматирования Markdown
     
     Args:
         text: Исходный текст ответа
         
     Returns:
-        str: Очищенный текст только на русском языке
+        str: Очищенный текст без markdown форматирования
     """
     # Убираем форматирование Markdown
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # **жирный** -> жирный
     text = re.sub(r'\*(.*?)\*', r'\1', text)      # *курсив* -> курсив
     text = re.sub(r'#+\s*(.*)', r'\1', text)      # # заголовок -> заголовок
-    text = re.sub(r'^\s*[-*]\s*', '', text, flags=re.MULTILINE)  # Убираем списки
-    text = re.sub(r'^\s*\d+\.\s*', '', text, flags=re.MULTILINE)  # Убираем нумерованные списки
-    
-    # Разрешаем русские и английские буквы, цифры, пробелы и пунктуацию
-    # Английские буквы нужны для технических терминов: XGBoost, BERT, CNN, GPU и т.д.
-    allowed_pattern = r'[а-яА-ЯёЁa-zA-Z0-9\s\.,!?;:—–\-\(\)\"\'\n]'
-    # Оставляем только разрешенные символы
-    text = ''.join(char if re.match(allowed_pattern, char) else '' for char in text)
-    
-    # Заменяем английские слова на русские (если остались после фильтрации)
-    english_replacements = {
-        'basics': 'основы',
-        'learning': 'обучение', 
-        'data': 'данные',
-        'model': 'модель',
-        'algorithm': 'алгоритм',
-        'training': 'обучение',
-        'testing': 'тестирование',
-        'accuracy': 'точность',
-        'prediction': 'прогноз',
-        'feature': 'признак',
-        'dataset': 'набор данных',
-        'machine learning': 'машинное обучение',
-        'neural network': 'нейронная сеть',
-        'deep learning': 'глубокое обучение',
-        'supervised': 'с учителем',
-        'unsupervised': 'без учителя',
-        'reinforcement': 'с подкреплением',
-        'welcome': 'добро пожаловать',
-        'hello': 'привет'
-    }
-    
-    for eng, rus in english_replacements.items():
-        text = re.sub(r'\b' + eng + r'\b', rus, text, flags=re.IGNORECASE)
+    text = re.sub(r'^\s*[-*]\s*', '', text, flags=re.MULTILINE)  # Убираем маркеры списков
+    text = re.sub(r'^\s*\d+\.\s*', '', text, flags=re.MULTILINE)  # Убираем нумерацию списков
     
     # Убираем лишние пробелы и переносы
     text = re.sub(r'\n\s*\n', '\n\n', text)  # Множественные переносы -> двойные
@@ -137,10 +105,11 @@ def get_dialog_history(chat_id: int) -> list:
         
     Returns:
         list: История сообщений в формате OpenAI [{"role": "...", "content": "..."}]
-        
+
     """
     if chat_id not in _dialogs:
-        # Инициализация нового диалога с системным промптом
+        # Инициализация нового диа
+        # лога с системным промптом
         _dialogs[chat_id] = [
             {"role": "system", "content": get_system_prompt()}
         ]
