@@ -251,22 +251,22 @@ async def handle_level_selection(callback_query: CallbackQuery):
             # Определяем, первый ли это выбор уровня
             is_first = is_first_level_selection(chat_id)
             
-            # Убираем кнопки после выбора уровня
-            await callback_query.message.edit_text(
-                f"✅ Выбран уровень: {level}",
-                reply_markup=None
-            )
-            
             if is_first:
-                # Первый выбор уровня - показываем приветствие с темами
+                # Первый выбор уровня - показываем "Выбран уровень" + приветствие
+                await callback_query.message.edit_text(
+                    f"✅ Выбран уровень: {level}",
+                    reply_markup=None
+                )
                 welcome_msg = get_welcome_message(level)
                 await callback_query.message.answer(welcome_msg)
                 add_assistant_message(chat_id, welcome_msg)
             else:
-                # Смена уровня - показываем простое сообщение без LLM
-                level_change_msg = f"✅ Уровень знаний изменен на '{level}'. Задавайте свои вопросы!"
-                await callback_query.message.answer(level_change_msg)
-                add_assistant_message(chat_id, level_change_msg)
+                # Смена уровня - показываем только финальное сообщение
+                await callback_query.message.edit_text(
+                    f"🔄 Уровень изменен на '{level}'. Задавайте свои вопросы!",
+                    reply_markup=None
+                )
+                add_assistant_message(chat_id, f"🔄 Уровень изменен на '{level}'. Задавайте свои вопросы!")
             
             # Подтверждаем callback (убираем "часики" с кнопки)
             await callback_query.answer()
