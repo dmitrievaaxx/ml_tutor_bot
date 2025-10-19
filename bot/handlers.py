@@ -199,6 +199,17 @@ async def handle_message(message: Message):
         dialog_history = get_dialog_history(chat_id)
         logger.info(f"История диалога получена: {len(dialog_history)} сообщений")
         
+        # Проверяем уровень пользователя и уведомляем, если не выбран
+        from bot.dialog import extract_user_level
+        user_level = extract_user_level(chat_id)
+        if not user_level:
+            logger.info(f"Пользователь {user_id} не выбрал уровень - используем базовый по умолчанию")
+            # Добавляем уведомление о том, что используется базовый уровень
+            level_notification = "📊 Уровень не выбран - использую базовый уровень для объяснения. Используй /level для смены уровня."
+            await thinking_msg.edit_text(f"{random.choice(THINKING_MESSAGES)}\n\n{level_notification}")
+            # Добавляем уведомление в историю диалога
+            add_assistant_message(chat_id, level_notification)
+        
         # Получение ответа от LLM с учетом контекста диалога
         logger.info("Начинаем запрос к LLM...")
         response = await get_llm_response(dialog_history)
@@ -348,6 +359,17 @@ async def handle_photo(message: Message):
         # Получаем историю диалога
         dialog_history = get_dialog_history(chat_id)
         logger.info(f"История диалога получена: {len(dialog_history)} сообщений")
+        
+        # Проверяем уровень пользователя и уведомляем, если не выбран
+        from bot.dialog import extract_user_level
+        user_level = extract_user_level(chat_id)
+        if not user_level:
+            logger.info(f"Пользователь {user_id} не выбрал уровень - используем базовый по умолчанию")
+            # Добавляем уведомление о том, что используется базовый уровень
+            level_notification = "📊 Уровень не выбран - использую базовый уровень для объяснения. Используй /level для смены уровня."
+            await thinking_msg.edit_text(f"🖼️ Анализирую изображение...\n\n{level_notification}")
+            # Добавляем уведомление в историю диалога
+            add_assistant_message(chat_id, level_notification)
         
         # Получаем ответ от Vision API
         from llm.vision_client import get_vision_response

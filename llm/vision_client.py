@@ -99,6 +99,16 @@ async def get_vision_response(messages: list, image_base64: str, image_format: s
         # Добавляем специальную инструкцию для Vision API в системный промпт
         if vision_messages and vision_messages[0]["role"] == "system":
             original_prompt = vision_messages[0]["content"]
+            
+            # Определяем уровень пользователя из системного промпта
+            user_level = "Базовый"  # по умолчанию
+            if "Новичок" in original_prompt:
+                user_level = "Новичок"
+            elif "Продвинутый" in original_prompt:
+                user_level = "Продвинутый"
+            elif "Базовый" in original_prompt:
+                user_level = "Базовый"
+            
             vision_messages[0]["content"] = f"""{original_prompt}
 
 ВАЖНАЯ ИНСТРУКЦИЯ ДЛЯ АНАЛИЗА ИЗОБРАЖЕНИЙ:
@@ -106,6 +116,7 @@ async def get_vision_response(messages: list, image_base64: str, image_format: s
 - Опиши детально, что именно изображено на картинке (формулы, схемы, графики, текст, код и т.д.)
 - ТОЛЬКО после детального анализа изображения давай объяснения по теме ML
 - НЕ игнорируй изображение! НЕ отвечай общими фразами!
+- УЧИТЫВАЙ УРОВЕНЬ ПОЛЬЗОВАТЕЛЯ: {user_level} - адаптируй сложность объяснения соответственно
 
 Формат ответа на изображение:
 1. Сначала детально опиши, что видишь на изображении
