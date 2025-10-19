@@ -1,44 +1,37 @@
 """
-Модуль для работы с локальной транскрипцией аудио через Whisper
+Модуль для работы с транскрипцией аудио через OpenAI Whisper API
 """
 
-import whisper
 import tempfile
 import os
 import logging
 from typing import Optional
+import openai
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 
-class LocalWhisperClient:
+class OpenAISpeechClient:
     """
-    Клиент для локальной транскрипции аудио с использованием Whisper
+    Клиент для транскрипции аудио с использованием OpenAI Whisper API
     """
     
-    def __init__(self, model_size: str = "tiny"):
+    def __init__(self):
         """
-        Инициализация клиента Whisper
+        Инициализация клиента OpenAI
+        """
+        # Проверяем наличие API ключа (используем тот же ключ что и для OpenRouter)
+        api_key = os.getenv('OPENAI_API_KEY') or os.getenv('OPENROUTER_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY или OPENROUTER_API_KEY не установлен в переменных окружения")
         
-        Args:
-            model_size: Размер модели ("tiny", "base", "small", "medium", "large")
-        """
-        self.model_size = model_size
-        self.model = None
-        logger.info(f"Инициализация Whisper с моделью {model_size}")
-    
-    def _load_model(self):
-        """
-        Загрузка модели Whisper (ленивая загрузка)
-        """
-        if self.model is None:
-            logger.info(f"Загрузка модели Whisper: {self.model_size}")
-            self.model = whisper.load_model(self.model_size)
-            logger.info("Модель Whisper загружена успешно")
+        self.client = OpenAI(api_key=api_key)
+        logger.info("OpenAI Whisper API клиент инициализирован")
     
     async def transcribe_audio(self, audio_path: str) -> str:
         """
-        Транскрибирует аудио-файл в текст
+        Транскрибирует аудио-файл в текст через OpenAI Whisper API
         
         Args:
             audio_path: Путь к аудио-файлу
@@ -54,25 +47,23 @@ class LocalWhisperClient:
             if not os.path.exists(audio_path):
                 raise FileNotFoundError(f"Аудио-файл не найден: {audio_path}")
             
-            # Проверяем размер файла (ограничение: 25MB)
+            # Проверяем размер файла (ограничение OpenAI: 25MB)
             file_size = os.path.getsize(audio_path)
             max_size = 25 * 1024 * 1024  # 25MB
             if file_size > max_size:
                 raise ValueError(f"Файл слишком большой: {file_size / (1024*1024):.1f}MB (максимум 25MB)")
             
-            # Загружаем модель при необходимости
-            self._load_model()
-            
             logger.info(f"Начинаем транскрипцию файла: {audio_path}")
             
-            # Транскрибируем аудио
-            result = self.model.transcribe(
-                audio_path,
-                language="ru",  # Указываем русский язык для лучшего качества
-                fp16=False  # Отключаем fp16 для совместимости
-            )
+            # Транскрибируем аудио через OpenAI API
+            with open(audio_path, 'rb') as audio_file:
+                transcript = self.client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="ru"  # Указываем русский язык для лучшего качества
+                )
             
-            transcribed_text = result["text"].strip()
+            transcribed_text = transcript.text.strip()
             logger.info(f"Транскрипция завершена. Длина текста: {len(transcribed_text)} символов")
             
             return transcribed_text
@@ -83,11 +74,11 @@ class LocalWhisperClient:
     
     async def transcribe_audio_data(self, audio_data: bytes, file_extension: str = ".ogg") -> str:
         """
-        Транскрибирует аудио-данные из памяти
+        Транскрибирует аудио-данные из памяти через OpenAI Whisper API
         
         Args:
             audio_data: Байты аудио-файла
-            file_extension: Расширение файла (по умолчанию .ogg для Telegram)
+            file_extension: Расширение файла
         
         Returns:
             str: Транскрибированный текст
@@ -111,19 +102,19 @@ class LocalWhisperClient:
 
 
 # Глобальный экземпляр клиента (ленивая инициализация)
-_speech_client: Optional[LocalWhisperClient] = None
+_speech_client: Optional[OpenAISpeechClient] = None
 
 
-def get_speech_client() -> LocalWhisperClient:
+def get_speech_client() -> OpenAISpeechClient:
     """
     Получить экземпляр клиента для транскрипции
     
     Returns:
-        LocalWhisperClient: Экземпляр клиента
+        OpenAISpeechClient: Экземпляр клиента
     """
     global _speech_client
     if _speech_client is None:
-        _speech_client = LocalWhisperClient()
+        _speech_client = OpenAISpeechClient()
     return _speech_client
 
 
