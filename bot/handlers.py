@@ -158,11 +158,22 @@ async def handle_message(message: Message):
     text = message.text
     
     # Проверяем, не является ли это сообщением с фото
-    if hasattr(message, 'photo') and message.photo:
-        logger.info(f"⚠️ ОШИБКА: Сообщение с фото попало в общий обработчик!")
-        logger.info(f"📷 Количество фото: {len(message.photo)}")
-        logger.info(f"📷 Размеры фото: {[f'{p.width}x{p.height}' for p in message.photo]}")
-        # Не обрабатываем фото в общем обработчике
+    # Проверяем все возможные способы определения фото
+    has_photo = (
+        (hasattr(message, 'photo') and message.photo) or
+        (hasattr(message, 'document') and message.document and message.document.mime_type and message.document.mime_type.startswith('image/')) or
+        (hasattr(message, 'animation') and message.animation) or
+        (hasattr(message, 'video') and message.video)
+    )
+    
+    if has_photo:
+        logger.info(f"⚠️ ОШИБКА: Сообщение с медиа попало в общий обработчик!")
+        logger.info(f"📷 Есть photo: {hasattr(message, 'photo') and message.photo}")
+        logger.info(f"📄 Есть document: {hasattr(message, 'document') and message.document}")
+        if hasattr(message, 'photo') and message.photo:
+            logger.info(f"📷 Количество фото: {len(message.photo)}")
+            logger.info(f"📷 Размеры фото: {[f'{p.width}x{p.height}' for p in message.photo]}")
+        # Не обрабатываем медиа в общем обработчике
         return
     
     logger.info(f"📝 ОБЩИЙ ОБРАБОТЧИК СООБЩЕНИЙ ВЫЗВАН! Пользователь {user_id}, текст: '{text}'")
@@ -250,20 +261,38 @@ async def handle_photo(message: Message):
     caption = message.caption or "Что на этом изображении?"
     
     logger.info(f"🎯 ОБРАБОТЧИК ФОТО ВЫЗВАН! Пользователь {user_id}, чат {chat_id}, подпись: {caption}")
-    logger.info(f"📷 Количество фото в сообщении: {len(message.photo)}")
-    logger.info(f"🔍 Размеры фото: {[f'{p.width}x{p.height}' for p in message.photo]}")
     logger.info(f"🔍 Тип сообщения: {type(message).__name__}")
     logger.info(f"🔍 Есть ли текст: {message.text is not None}")
     logger.info(f"🔍 Текст сообщения: '{message.text}'")
+    
+    # Определяем тип медиа
+    if message.photo:
+        logger.info(f"📷 Обычное фото - количество: {len(message.photo)}")
+        logger.info(f"📷 Размеры фото: {[f'{p.width}x{p.height}' for p in message.photo]}")
+        media_type = "photo"
+    elif message.document:
+        logger.info(f"📄 Документ-изображение: {message.document.file_name}")
+        logger.info(f"📄 MIME тип: {message.document.mime_type}")
+        media_type = "document"
+    else:
+        logger.info(f"❓ Неизвестный тип медиа")
+        media_type = "unknown"
     
     try:
         # Показываем индикатор обработки изображения
         await message.bot.send_chat_action(chat_id=chat_id, action="typing")
         thinking_msg = await message.answer("🖼️ Анализирую изображение...")
         
-        # Получаем фото наилучшего качества (последний элемент в списке)
-        photo = message.photo[-1]
-        file = await message.bot.get_file(photo.file_id)
+        # Получаем файл в зависимости от типа медиа
+        if message.photo:
+            # Обычное фото - берем наилучшего качества (последний элемент в списке)
+            photo = message.photo[-1]
+            file = await message.bot.get_file(photo.file_id)
+        elif message.document:
+            # Документ-изображение
+            file = await message.bot.get_file(message.document.file_id)
+        else:
+            raise ValueError("Неизвестный тип медиа")
         
         # Скачиваем изображение
         photo_bytes = await message.bot.download_file(file.file_path)
@@ -272,15 +301,29 @@ async def handle_photo(message: Message):
         image_data = photo_bytes.read()
         image_base64 = base64.b64encode(image_data).decode('utf-8')
         
-        # Определяем формат изображения по первым байтам
-        if image_data.startswith(b'\xff\xd8\xff'):
-            image_format = "jpeg"
-        elif image_data.startswith(b'\x89PNG'):
-            image_format = "png"
-        elif image_data.startswith(b'GIF'):
-            image_format = "gif"
+        # Определяем формат изображения
+        if message.document and message.document.mime_type:
+            # Для документов используем MIME тип
+            if 'jpeg' in message.document.mime_type or 'jpg' in message.document.mime_type:
+                image_format = "jpeg"
+            elif 'png' in message.document.mime_type:
+                image_format = "png"
+            elif 'gif' in message.document.mime_type:
+                image_format = "gif"
+            elif 'webp' in message.document.mime_type:
+                image_format = "webp"
+            else:
+                image_format = "jpeg"  # fallback
         else:
-            image_format = "jpeg"  # fallback
+            # Для обычных фото определяем по первым байтам
+            if image_data.startswith(b'\xff\xd8\xff'):
+                image_format = "jpeg"
+            elif image_data.startswith(b'\x89PNG'):
+                image_format = "png"
+            elif image_data.startswith(b'GIF'):
+                image_format = "gif"
+            else:
+                image_format = "jpeg"  # fallback
         
         # Проверяем размер изображения (не более 20MB для Vision API)
         image_size_mb = len(image_data) / (1024 * 1024)
@@ -439,8 +482,8 @@ def register_handlers(dp: Dispatcher):
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection)
     
-    # Обработчик фотографий (должен быть перед общим обработчиком сообщений)
-    dp.message.register(handle_photo, F.photo)
+    # Обработчик фотографий и документов с изображениями (должен быть перед общим обработчиком сообщений)
+    dp.message.register(handle_photo, F.photo | (F.document.has(F.mime_type.startswith('image/'))))
     
     # Обработчик всех остальных текстовых сообщений через LLM с контекстом
     dp.message.register(handle_message)
