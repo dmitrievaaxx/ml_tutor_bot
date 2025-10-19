@@ -157,7 +157,11 @@ async def handle_message(message: Message):
     chat_id = message.chat.id
     text = message.text
     
-    logger.info(f"Сообщение от пользователя {user_id}: {text}")
+    logger.info(f"📝 ОБЩИЙ ОБРАБОТЧИК СООБЩЕНИЙ ВЫЗВАН! Пользователь {user_id}, текст: '{text}'")
+    logger.info(f"🔍 Тип сообщения: {type(message).__name__}")
+    logger.info(f"📷 Есть ли фото: {hasattr(message, 'photo') and message.photo is not None}")
+    if hasattr(message, 'photo') and message.photo:
+        logger.info(f"⚠️ ВНИМАНИЕ: Сообщение содержит фото, но обрабатывается как текст!")
     
     try:
         # Показываем индикатор "печатает..." пока LLM думает
@@ -239,7 +243,9 @@ async def handle_photo(message: Message):
     chat_id = message.chat.id
     caption = message.caption or "Что на этом изображении?"
     
-    logger.info(f"Фото от пользователя {user_id} с подписью: {caption}")
+    logger.info(f"🎯 ОБРАБОТЧИК ФОТО ВЫЗВАН! Пользователь {user_id}, чат {chat_id}, подпись: {caption}")
+    logger.info(f"📷 Количество фото в сообщении: {len(message.photo)}")
+    logger.info(f"🔍 Размеры фото: {[f'{p.width}x{p.height}' for p in message.photo]}")
     
     try:
         # Показываем индикатор обработки изображения
