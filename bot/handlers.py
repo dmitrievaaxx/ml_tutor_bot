@@ -254,8 +254,20 @@ async def handle_photo(message: Message):
         photo_bytes = await message.bot.download_file(file.file_path)
         
         # Конвертируем в base64
-        image_base64 = base64.b64encode(photo_bytes.read()).decode('utf-8')
-        logger.info(f"Изображение конвертировано в base64: {len(image_base64)} символов")
+        image_data = photo_bytes.read()
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Проверяем размер изображения (не более 20MB для Vision API)
+        image_size_mb = len(image_data) / (1024 * 1024)
+        logger.info(f"Изображение конвертировано в base64: {len(image_base64)} символов, размер: {image_size_mb:.2f} MB")
+        
+        if image_size_mb > 20:
+            await thinking_msg.delete()
+            await message.answer(
+                "Извините, изображение слишком большое (более 20MB). "
+                "Пожалуйста, сожмите изображение и попробуйте еще раз."
+            )
+            return
         
         # Добавляем сообщение пользователя с подписью в историю
         add_user_message(chat_id, caption)
@@ -272,7 +284,7 @@ async def handle_photo(message: Message):
         
         # Проверка на пустой ответ
         if not response or response.strip() == "":
-            response = "Извините, я не смог проанализировать изображение. Попробуйте отправить другое фото."
+            response = "Извините, я не смог проанализировать изображение. Возможные причины:\n\n• Изображение слишком большое или в неподдерживаемом формате\n• Проблемы с Vision API\n• Превышен лимит запросов\n\nПопробуйте отправить другое фото в формате JPEG или PNG."
         
         # Очистка ответа от форматирования
         cleaned_response = clean_response(response)
