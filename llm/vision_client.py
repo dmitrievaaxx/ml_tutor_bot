@@ -48,7 +48,7 @@ def get_vision_client():
     return _vision_client
 
 
-async def get_vision_response(messages: list, image_base64: str) -> str:
+async def get_vision_response(messages: list, image_base64: str, image_format: str = "jpeg") -> str:
     """
     Получение ответа от Vision API на основе истории диалога и изображения
     
@@ -61,6 +61,7 @@ async def get_vision_response(messages: list, image_base64: str) -> str:
     Args:
         messages: История диалога в формате [{"role": "...", "content": "..."}]
         image_base64: Изображение в формате base64
+        image_format: Формат изображения (jpeg, png, gif)
         
     Returns:
         str: Ответ от Vision модели
@@ -96,7 +97,22 @@ async def get_vision_response(messages: list, image_base64: str) -> str:
         
         # Добавляем специальную инструкцию для Vision API в системный промпт
         if vision_messages and vision_messages[0]["role"] == "system":
-            vision_messages[0]["content"] += "\n\nВАЖНО: Когда пользователь отправляет изображение, ты должен внимательно проанализировать его содержимое и описать, что на нем изображено. Не игнорируй изображение!"
+            vision_messages[0]["content"] = """
+Ты помощник по машинному обучению, который специализируется на анализе изображений.
+
+КРИТИЧЕСКИ ВАЖНО: 
+- Когда пользователь отправляет изображение, ты ДОЛЖЕН сначала проанализировать его содержимое
+- Опиши, что именно изображено на картинке (формулы, схемы, графики, текст и т.д.)
+- ТОЛЬКО после анализа изображения можешь давать дополнительные объяснения по теме ML
+- НЕ игнорируй изображение и не отвечай стандартными фразами!
+
+Формат ответа:
+1. Сначала опиши, что видишь на изображении
+2. Затем объясни это в контексте машинного обучения (если применимо)
+3. Предложи связанные темы для изучения
+
+Всегда отвечай на русском языке.
+            """
         
         # Добавляем изображение к последнему сообщению пользователя
         vision_messages[-1] = {
@@ -104,12 +120,12 @@ async def get_vision_response(messages: list, image_base64: str) -> str:
             "content": [
                 {
                     "type": "text",
-                    "text": last_message["content"] if last_message["content"] else "Проанализируй это изображение и расскажи, что на нем изображено."
+                    "text": last_message["content"] if last_message["content"] else "Внимательно проанализируй это изображение. Опиши, что на нем изображено, и объясни это в контексте машинного обучения."
                 },
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/png;base64,{image_base64}"
+                        "url": f"data:image/{image_format};base64,{image_base64}"
                     }
                 }
             ]
@@ -118,6 +134,14 @@ async def get_vision_response(messages: list, image_base64: str) -> str:
         # Логируем структуру запроса для отладки
         logger.info(f"Vision запрос содержит {len(vision_messages)} сообщений")
         logger.info(f"Последнее сообщение содержит: текст='{last_message.get('content', 'НЕТ')}' + изображение")
+        logger.info(f"Формат изображения: {image_format}, размер base64: {len(image_base64)} символов")
+        
+        # Проверяем, что изображение действительно добавлено
+        last_msg_content = vision_messages[-1]["content"]
+        if isinstance(last_msg_content, list) and len(last_msg_content) >= 2:
+            logger.info("✅ Изображение успешно добавлено к сообщению")
+        else:
+            logger.error("❌ ОШИБКА: Изображение НЕ добавлено к сообщению!")
         
         # Запрос к Vision API
         response = await client.chat.completions.create(
