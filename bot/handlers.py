@@ -257,9 +257,19 @@ async def handle_photo(message: Message):
         image_data = photo_bytes.read()
         image_base64 = base64.b64encode(image_data).decode('utf-8')
         
+        # Определяем формат изображения по первым байтам
+        if image_data.startswith(b'\xff\xd8\xff'):
+            image_format = "jpeg"
+        elif image_data.startswith(b'\x89PNG'):
+            image_format = "png"
+        elif image_data.startswith(b'GIF'):
+            image_format = "gif"
+        else:
+            image_format = "jpeg"  # fallback
+        
         # Проверяем размер изображения (не более 20MB для Vision API)
         image_size_mb = len(image_data) / (1024 * 1024)
-        logger.info(f"Изображение конвертировано в base64: {len(image_base64)} символов, размер: {image_size_mb:.2f} MB")
+        logger.info(f"Изображение конвертировано в base64: {len(image_base64)} символов, размер: {image_size_mb:.2f} MB, формат: {image_format}")
         
         if image_size_mb > 20:
             await thinking_msg.delete()
@@ -279,7 +289,7 @@ async def handle_photo(message: Message):
         # Получаем ответ от Vision API
         from llm.vision_client import get_vision_response
         logger.info("Начинаем запрос к Vision API...")
-        response = await get_vision_response(dialog_history, image_base64)
+        response = await get_vision_response(dialog_history, image_base64, image_format)
         logger.info(f"Ответ от Vision API получен: {len(response) if response else 0} символов")
         
         # Проверка на пустой ответ
