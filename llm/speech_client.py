@@ -60,11 +60,23 @@ class HuggingFaceSpeechClient:
             
             # Транскрибируем аудио через Hugging Face API
             with open(audio_path, 'rb') as audio_file:
+                # Определяем правильный Content-Type для файла
+                content_type = "audio/ogg"  # По умолчанию для .ogg файлов
+                if audio_path.endswith('.wav'):
+                    content_type = "audio/wav"
+                elif audio_path.endswith('.mp3'):
+                    content_type = "audio/mpeg"
+                elif audio_path.endswith('.flac'):
+                    content_type = "audio/flac"
+                
+                # Отправляем файл напрямую с правильным Content-Type
                 response = requests.post(
                     self.api_url,
-                    headers=self.headers,
-                    files={"file": audio_file},
-                    data={"language": "russian", "task": "transcribe"}
+                    headers={
+                        **self.headers,
+                        "Content-Type": content_type
+                    },
+                    data=audio_file.read()
                 )
             
             # Проверяем статус ответа
