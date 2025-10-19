@@ -132,4 +132,20 @@ async def get_vision_response(messages: list, image_base64: str) -> str:
         
     except Exception as e:
         logger.error(f"Ошибка Vision API с моделью {model}: {type(e).__name__}: {e}")
-        return ""
+        
+        # Детальная диагностика ошибок
+        if "rate limit" in str(e).lower():
+            logger.error("Превышен лимит запросов к Vision API")
+            return "Извините, превышен лимит запросов к Vision API. Попробуйте позже."
+        elif "invalid" in str(e).lower() and "image" in str(e).lower():
+            logger.error("Неподдерживаемый формат изображения")
+            return "Извините, формат изображения не поддерживается. Попробуйте отправить изображение в формате JPEG или PNG."
+        elif "timeout" in str(e).lower():
+            logger.error("Таймаут запроса к Vision API")
+            return "Извините, запрос к Vision API занял слишком много времени. Попробуйте еще раз."
+        elif "model" in str(e).lower() and "not found" in str(e).lower():
+            logger.error("Vision модель недоступна")
+            return "Извините, Vision модель временно недоступна. Попробуйте позже."
+        else:
+            logger.error(f"Неизвестная ошибка Vision API: {e}")
+            return f"Извините, произошла ошибка при анализе изображения: {type(e).__name__}. Попробуйте отправить другое фото."
