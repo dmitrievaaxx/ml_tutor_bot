@@ -94,22 +94,30 @@ async def get_vision_response(messages: list, image_base64: str) -> str:
         vision_messages = messages.copy()
         last_message = vision_messages[-1]
         
+        # Добавляем специальную инструкцию для Vision API в системный промпт
+        if vision_messages and vision_messages[0]["role"] == "system":
+            vision_messages[0]["content"] += "\n\nВАЖНО: Когда пользователь отправляет изображение, ты должен внимательно проанализировать его содержимое и описать, что на нем изображено. Не игнорируй изображение!"
+        
         # Добавляем изображение к последнему сообщению пользователя
         vision_messages[-1] = {
             "role": "user",
             "content": [
                 {
                     "type": "text",
-                    "text": last_message["content"]
+                    "text": last_message["content"] if last_message["content"] else "Проанализируй это изображение и расскажи, что на нем изображено."
                 },
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{image_base64}"
+                        "url": f"data:image/png;base64,{image_base64}"
                     }
                 }
             ]
         }
+        
+        # Логируем структуру запроса для отладки
+        logger.info(f"Vision запрос содержит {len(vision_messages)} сообщений")
+        logger.info(f"Последнее сообщение содержит: текст='{last_message.get('content', 'НЕТ')}' + изображение")
         
         # Запрос к Vision API
         response = await client.chat.completions.create(
