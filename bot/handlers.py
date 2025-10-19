@@ -578,6 +578,10 @@ async def handle_voice(message: Message):
         # Транскрибируем аудио
         try:
             transcribed_text = await transcribe_audio_data(audio_data.read(), file_extension)
+        except ValueError as e:
+            logger.error(f"Ошибка конфигурации: {e}")
+            await processing_msg.edit_text("❌ Функция транскрипции голосовых сообщений не настроена. Обратитесь к администратору.")
+            return
         except Exception as e:
             logger.error(f"Ошибка транскрипции: {e}")
             await processing_msg.edit_text("❌ Не удалось транскрибировать голосовое сообщение. Возможно, проблема с API или сетью. Попробуйте отправить текстовое сообщение.")

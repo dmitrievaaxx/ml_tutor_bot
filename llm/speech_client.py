@@ -1,37 +1,40 @@
 """
-Модуль для работы с транскрипцией аудио через OpenAI Whisper API
+Модуль для работы с транскрипцией аудио через Hugging Face Whisper API
 """
 
 import tempfile
 import os
 import logging
+import requests
 from typing import Optional
-import openai
-from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 
-class OpenAISpeechClient:
+class HuggingFaceSpeechClient:
     """
-    Клиент для транскрипции аудио с использованием OpenAI Whisper API
+    Клиент для транскрипции аудио с использованием Hugging Face Whisper API
     """
     
     def __init__(self):
         """
-        Инициализация клиента OpenAI
+        Инициализация клиента Hugging Face
         """
-        # Проверяем наличие API ключа (используем тот же ключ что и для OpenRouter)
-        api_key = os.getenv('OPENAI_API_KEY') or os.getenv('OPENROUTER_API_KEY')
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY или OPENROUTER_API_KEY не установлен в переменных окружения")
+        # Проверяем наличие API токена
+        api_token = os.getenv('HUGGINGFACE_API_TOKEN')
+        if not api_token:
+            raise ValueError("HUGGINGFACE_API_TOKEN не установлен в переменных окружения")
         
-        self.client = OpenAI(api_key=api_key)
-        logger.info("OpenAI Whisper API клиент инициализирован")
+        self.api_token = api_token
+        self.api_url = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
+        self.headers = {
+            "Authorization": f"Bearer {api_token}"
+        }
+        logger.info("Hugging Face Whisper API клиент инициализирован")
     
     async def transcribe_audio(self, audio_path: str) -> str:
         """
-        Транскрибирует аудио-файл в текст через OpenAI Whisper API
+        Транскрибирует аудио-файл в текст через Hugging Face Whisper API
         
         Args:
             audio_path: Путь к аудио-файлу
@@ -47,7 +50,7 @@ class OpenAISpeechClient:
             if not os.path.exists(audio_path):
                 raise FileNotFoundError(f"Аудио-файл не найден: {audio_path}")
             
-            # Проверяем размер файла (ограничение OpenAI: 25MB)
+            # Проверяем размер файла (ограничение HF: 25MB)
             file_size = os.path.getsize(audio_path)
             max_size = 25 * 1024 * 1024  # 25MB
             if file_size > max_size:
@@ -55,26 +58,39 @@ class OpenAISpeechClient:
             
             logger.info(f"Начинаем транскрипцию файла: {audio_path}")
             
-            # Транскрибируем аудио через OpenAI API
+            # Транскрибируем аудио через Hugging Face API
             with open(audio_path, 'rb') as audio_file:
-                transcript = self.client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    language="ru"  # Указываем русский язык для лучшего качества
+                response = requests.post(
+                    self.api_url,
+                    headers=self.headers,
+                    files={"file": audio_file},
+                    data={"language": "russian", "task": "transcribe"}
                 )
             
-            transcribed_text = transcript.text.strip()
-            logger.info(f"Транскрипция завершена. Длина текста: {len(transcribed_text)} символов")
-            
-            return transcribed_text
-            
+            # Проверяем статус ответа
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, dict) and 'text' in result:
+                    transcribed_text = result['text'].strip()
+                elif isinstance(result, list) and len(result) > 0:
+                    transcribed_text = result[0].get('text', '').strip()
+                else:
+                    raise ValueError(f"Неожиданный формат ответа от API: {result}")
+                
+                logger.info(f"Транскрипция завершена. Длина текста: {len(transcribed_text)} символов")
+                return transcribed_text
+            else:
+                error_msg = f"Ошибка API: {response.status_code} - {response.text}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+                
         except Exception as e:
             logger.error(f"Ошибка при транскрипции аудио: {e}")
             raise
     
     async def transcribe_audio_data(self, audio_data: bytes, file_extension: str = ".ogg") -> str:
         """
-        Транскрибирует аудио-данные из памяти через OpenAI Whisper API
+        Транскрибирует аудио-данные из памяти через Hugging Face Whisper API
         
         Args:
             audio_data: Байты аудио-файла
@@ -102,19 +118,19 @@ class OpenAISpeechClient:
 
 
 # Глобальный экземпляр клиента (ленивая инициализация)
-_speech_client: Optional[OpenAISpeechClient] = None
+_speech_client: Optional[HuggingFaceSpeechClient] = None
 
 
-def get_speech_client() -> OpenAISpeechClient:
+def get_speech_client() -> HuggingFaceSpeechClient:
     """
     Получить экземпляр клиента для транскрипции
     
     Returns:
-        OpenAISpeechClient: Экземпляр клиента
+        HuggingFaceSpeechClient: Экземпляр клиента
     """
     global _speech_client
     if _speech_client is None:
-        _speech_client = OpenAISpeechClient()
+        _speech_client = HuggingFaceSpeechClient()
     return _speech_client
 
 
