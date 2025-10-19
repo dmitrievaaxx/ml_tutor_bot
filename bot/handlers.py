@@ -538,8 +538,9 @@ async def handle_voice(message: Message):
             user_level = "Базовый"
             # Обновляем сообщение "обрабатываю" без уведомления
             try:
-                if processing_msg.text != "🎤 Транскрибирую аудио...":
-                    await processing_msg.edit_text("🎤 Транскрибирую аудио...")
+                new_text = "🎤 Транскрибирую аудио..."
+                if processing_msg.text != new_text:
+                    await processing_msg.edit_text(new_text)
             except Exception as e:
                 logger.warning(f"Не удалось обновить сообщение 'обрабатываю': {e}")
         logger.info(f"Уровень пользователя {user_id}: {user_level}")
@@ -573,7 +574,12 @@ async def handle_voice(message: Message):
         audio_data.seek(0)
         
         # Обновляем сообщение о статусе
-        await processing_msg.edit_text("🎤 Транскрибирую аудио...")
+        try:
+            new_text = "🎤 Транскрибирую аудио..."
+            if processing_msg.text != new_text:
+                await processing_msg.edit_text(new_text)
+        except Exception as e:
+            logger.warning(f"Не удалось обновить сообщение о статусе: {e}")
         
         # Транскрибируем аудио
         try:
@@ -594,7 +600,12 @@ async def handle_voice(message: Message):
             return
         
         # Обновляем сообщение о статусе
-        await processing_msg.edit_text("💭 Обрабатываю ваш вопрос...")
+        try:
+            new_text = "💭 Обрабатываю ваш вопрос..."
+            if processing_msg.text != new_text:
+                await processing_msg.edit_text(new_text)
+        except Exception as e:
+            logger.warning(f"Не удалось обновить сообщение о статусе: {e}")
         
         # Добавляем транскрибированный текст в историю диалога
         add_user_message(chat_id, transcribed_text)
