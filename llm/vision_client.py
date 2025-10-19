@@ -80,7 +80,7 @@ async def get_vision_response(messages: list, image_base64: str, image_format: s
     
     # Получение параметров модели из переменных окружения
     # Используем Google Gemini Flash для Vision - надежная модель с хорошей поддержкой изображений
-    model = os.getenv('VISION_MODEL', 'qwen/qwen-2-vl-7b-instruct:free')
+    model = os.getenv('VISION_MODEL', 'meta-llama/llama-3.2-3b-instruct:free')
     temperature = float(os.getenv('LLM_TEMPERATURE', '0.7'))
     max_tokens = int(os.getenv('LLM_MAX_TOKENS', '1000'))
     
