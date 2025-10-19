@@ -16,7 +16,7 @@ class LocalWhisperClient:
     Клиент для локальной транскрипции аудио с использованием Whisper
     """
     
-    def __init__(self, model_size: str = "base"):
+    def __init__(self, model_size: str = "tiny"):
         """
         Инициализация клиента Whisper
         
