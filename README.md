@@ -62,6 +62,7 @@ cp .env.example .env
 TELEGRAM_BOT_TOKEN=ваш_токен_от_botfather
 OPENROUTER_API_KEY=ваш_ключ_от_openrouter
 LLM_MODEL=mistralai/mistral-7b-instruct:free
+VISION_MODEL=google/gemini-flash-1.5
 LLM_TEMPERATURE=0.7
 LLM_MAX_TOKENS=500
 LOG_LEVEL=INFO
