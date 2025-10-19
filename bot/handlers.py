@@ -2,7 +2,8 @@
 
 import logging
 import random
-from aiogram import Dispatcher
+import base64
+from aiogram import Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
@@ -218,6 +219,98 @@ async def handle_message(message: Message):
         )
 
 
+async def handle_photo(message: Message):
+    """
+    Обработка фотографий с использованием Vision API
+    
+    Функция:
+    1. Получает фото от пользователя
+    2. Показывает индикатор обработки изображения
+    3. Скачивает фото наилучшего качества из Telegram
+    4. Конвертирует в base64 для передачи в Vision API
+    5. Добавляет подпись к фото в историю диалога
+    6. Отправляет запрос в Vision API с контекстом
+    7. Возвращает ответ пользователю
+    
+    Args:
+        message: Объект сообщения с фото
+    """
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    caption = message.caption or "Что на этом изображении?"
+    
+    logger.info(f"Фото от пользователя {user_id} с подписью: {caption}")
+    
+    try:
+        # Показываем индикатор обработки изображения
+        await message.bot.send_chat_action(chat_id=chat_id, action="typing")
+        thinking_msg = await message.answer("🖼️ Анализирую изображение...")
+        
+        # Получаем фото наилучшего качества (последний элемент в списке)
+        photo = message.photo[-1]
+        file = await message.bot.get_file(photo.file_id)
+        
+        # Скачиваем изображение
+        photo_bytes = await message.bot.download_file(file.file_path)
+        
+        # Конвертируем в base64
+        image_base64 = base64.b64encode(photo_bytes.read()).decode('utf-8')
+        logger.info(f"Изображение конвертировано в base64: {len(image_base64)} символов")
+        
+        # Добавляем сообщение пользователя с подписью в историю
+        add_user_message(chat_id, caption)
+        
+        # Получаем историю диалога
+        dialog_history = get_dialog_history(chat_id)
+        logger.info(f"История диалога получена: {len(dialog_history)} сообщений")
+        
+        # Получаем ответ от Vision API
+        from llm.vision_client import get_vision_response
+        logger.info("Начинаем запрос к Vision API...")
+        response = await get_vision_response(dialog_history, image_base64)
+        logger.info(f"Ответ от Vision API получен: {len(response) if response else 0} символов")
+        
+        # Проверка на пустой ответ
+        if not response or response.strip() == "":
+            response = "Извините, я не смог проанализировать изображение. Попробуйте отправить другое фото."
+        
+        # Очистка ответа от форматирования
+        cleaned_response = clean_response(response)
+        logger.info(f"Ответ очищен: {len(response)} -> {len(cleaned_response)} символов")
+        
+        # Сохранение ответа ассистента в историю
+        add_assistant_message(chat_id, cleaned_response)
+        
+        # Удаляем сообщение об обработке
+        await thinking_msg.delete()
+        
+        # Отправляем ответ пользователю
+        await message.answer(cleaned_response)
+        
+    except ValueError as e:
+        # Ошибка конфигурации (например, отсутствует API ключ)
+        logger.error(f"Ошибка конфигурации Vision API: {e}")
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
+        await message.answer(
+            "⚠️ Vision API не настроен. Обратитесь к администратору."
+        )
+        
+    except Exception as e:
+        # Общая ошибка при обработке изображения
+        logger.error(f"Ошибка при обработке фото: {type(e).__name__}: {e}")
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
+        await message.answer(
+            "😔 Извините, произошла ошибка при обработке изображения. "
+            "Попробуйте отправить другое фото или обратитесь позже."
+        )
+
+
 async def handle_level_selection(callback_query: CallbackQuery):
     """
     Обработка выбора уровня знаний через кнопки
@@ -308,6 +401,9 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection)
+    
+    # Обработчик фотографий - Vision API (регистрируется ДО текстовых сообщений)
+    dp.message.register(handle_photo, F.photo)
     
     # Обработчик всех остальных текстовых сообщений через LLM с контекстом
     dp.message.register(handle_message)
