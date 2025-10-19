@@ -157,14 +157,19 @@ async def handle_message(message: Message):
     chat_id = message.chat.id
     text = message.text
     
-    # Проверяем, не является ли это сообщением с фото
-    # Проверяем все возможные способы определения фото
+    # Проверяем, не является ли это сообщением с медиа
+    # Проверяем все возможные способы определения медиа
     has_photo = (
         (hasattr(message, 'photo') and message.photo) or
         (hasattr(message, 'document') and message.document and message.document.mime_type and message.document.mime_type.startswith('image/')) or
         (hasattr(message, 'animation') and message.animation) or
         (hasattr(message, 'video') and message.video)
     )
+    
+    # Дополнительная проверка для документов с изображениями
+    if hasattr(message, 'document') and message.document and message.document.mime_type:
+        if message.document.mime_type.startswith('image/'):
+            has_photo = True
     
     if has_photo:
         logger.info(f"⚠️ ОШИБКА: Сообщение с медиа попало в общий обработчик!")
@@ -483,7 +488,9 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(handle_level_selection)
     
     # Обработчик фотографий и документов с изображениями (должен быть перед общим обработчиком сообщений)
-    dp.message.register(handle_photo, F.photo | (F.document.has(F.mime_type.startswith('image/'))))
+    # Регистрируем отдельно для каждого типа медиа
+    dp.message.register(handle_photo, F.photo)
+    dp.message.register(handle_photo, F.document.has(F.mime_type.startswith('image/')))
     
     # Обработчик всех остальных текстовых сообщений через LLM с контекстом
     dp.message.register(handle_message)
