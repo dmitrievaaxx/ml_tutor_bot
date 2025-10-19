@@ -424,7 +424,7 @@ def register_handlers(dp: Dispatcher):
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection)
     
-    # Обработчик фотографий - Vision API (регистрируется ДО текстовых сообщений)
+    # Обработчик фотографий (должен быть перед общим обработчиком сообщений)
     dp.message.register(handle_photo, F.photo)
     
     # Обработчик всех остальных текстовых сообщений через LLM с контекстом
