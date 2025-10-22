@@ -156,7 +156,7 @@ async def get_llm_response_for_test(prompt: str) -> str:
     ]
     
     # Увеличенные параметры для генерации тестов
-    temperature = 0.3  # Более детерминированный ответ
+    temperature = 0.8  # Более случайные ответы
     max_tokens = 200   # Больше токенов для полного ответа
     
     logger.info(f"Генерация теста | Модели: {len(fallback_models)} | Макс токенов: {max_tokens}")

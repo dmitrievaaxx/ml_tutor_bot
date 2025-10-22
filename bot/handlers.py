@@ -126,10 +126,10 @@ async def handle_learn(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     
     courses_text = "📚 Доступные курсы:\n\n"
-    for course in courses:
-        courses_text += f"📚 **{course.name}**\n"
-        courses_text += f"   {course.description}\n"
-        courses_text += f"   Уроков: {course.total_lessons}\n\n"
+    for i, course in enumerate(courses, 1):
+        courses_text += f"{i}️⃣ {course.name}\n"
+        courses_text += f"   └─ {course.description}\n"
+        courses_text += f"   └─ Уроков: {course.total_lessons}\n\n"
     
     courses_text += "Выберите курс для изучения:"
     
@@ -578,14 +578,27 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
     try:
         logger.info(f"Генерируем тест для урока: {lesson.title}")
         
-        # Безопасно форматируем промпт
+        # Безопасно форматируем промпт с рандомизацией
         try:
+            # Добавляем случайный элемент для разнообразия
+            import random
+            random_hint = random.choice([
+                "Создай вопрос с простыми числами",
+                "Используй разные числа в вопросе", 
+                "Сделай вопрос интересным",
+                "Используй числа от 1 до 5"
+            ])
+            
             # Используем Template для безопасного форматирования
             template = Template(TEST_GENERATION_PROMPT)
             prompt = template.safe_substitute(
                 lesson_title=lesson.title,
                 lesson_content=lesson.content
             )
+            
+            # Добавляем рандомизацию в конец промпта
+            prompt += f"\n\nВАЖНО: {random_hint}. Создай УНИКАЛЬНЫЙ вопрос, отличающийся от предыдущих."
+            
         except Exception as format_error:
             logger.error(f"Ошибка форматирования промпта: {format_error}")
             await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
@@ -685,11 +698,25 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                 logger.warning(f"Математически некорректный ответ, генерируем новый")
                 # Попробуем сгенерировать еще раз с новым промптом
                 try:
+                    # Добавляем еще больше рандомизации для повторной генерации
+                    import random
+                    retry_hints = [
+                        "Используй ДРУГИЕ числа в вопросе",
+                        "Создай вопрос с числами 2, 3, 4",
+                        "Используй числа 1, 2, 3 для разнообразия",
+                        "Сделай вопрос с числами 3, 4, 5"
+                    ]
+                    retry_hint = random.choice(retry_hints)
+                    
                     retry_template = Template(TEST_GENERATION_PROMPT)
                     retry_prompt = retry_template.safe_substitute(
                         lesson_title=lesson.title,
                         lesson_content=lesson.content
                     )
+                    
+                    # Добавляем рандомизацию для повторной генерации
+                    retry_prompt += f"\n\nКРИТИЧЕСКИ ВАЖНО: {retry_hint}. Это ПОВТОРНАЯ генерация - создай СОВСЕМ ДРУГОЙ вопрос!"
+                    
                     response = await get_llm_response_for_test(retry_prompt)
                 except Exception as retry_error:
                     logger.error(f"Ошибка повторной генерации: {retry_error}")
@@ -825,10 +852,12 @@ async def handle_test_answer(callback_query: CallbackQuery):
             
             await callback_query.message.edit_text(
                 "✅ Правильно! Урок завершен.\n\n"
-                "Вы можете перейти к следующему уроку или повторить материал.",
+                "Отлично! Вы успешно прошли тест. Можете перейти к следующему уроку.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="➡️ Следующий урок", callback_data=f"lesson_{course_id}_{lesson.lesson_number+1}"),
+                        InlineKeyboardButton(text="➡️ Перейти к следующему уроку", callback_data=f"lesson_{course_id}_{lesson.lesson_number+1}")
+                    ],
+                    [
                         InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
                     ]
                 ])
@@ -837,12 +866,25 @@ async def handle_test_answer(callback_query: CallbackQuery):
             # Сохраняем ошибку
             db.add_test_error(user_id, lesson_id, "Тестовый вопрос", correct_answer, user_answer)
             
+            # Получаем информацию об уроке для кнопки "Вернуться к уроку"
+            lesson = None
+            course_id = None
+            for cid in range(1, 10):
+                for ln in range(1, 20):
+                    l = db.get_lesson(cid, ln)
+                    if l and l.id == lesson_id:
+                        lesson = l
+                        course_id = cid
+                        break
+                if lesson:
+                    break
+            
             await callback_query.message.edit_text(
                 f"❌ Неправильно! Правильный ответ: {correct_answer}\n\n"
-                "Попробуйте еще раз с новым вопросом.",
+                "Вернитесь к уроку, чтобы повторить материал, а затем попробуйте тест снова.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="🔄 Новый вопрос", callback_data=f"test_{lesson_id}"),
+                        InlineKeyboardButton(text="📖 Вернуться к уроку", callback_data=f"lesson_{course_id}_{lesson.lesson_number}"),
                         InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
                     ]
                 ])
@@ -952,7 +994,7 @@ async def handle_voice(message: Message):
 
 def _is_mathematical_question(question: str) -> bool:
     """Проверяет, является ли вопрос математическим"""
-    math_keywords = ['вектор', 'матрица', 'умножение', 'скалярное произведение', 'детерминант', 'равен', 'равна']
+    math_keywords = ['вектор', 'матрица', 'умножение', 'скалярное произведение', 'детерминант', 'равен', 'равна', 'сумма', 'сложение', 'вычитание', 'деление']
     return any(keyword in question.lower() for keyword in math_keywords)
 
 
@@ -982,6 +1024,29 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
                         return False
                 except Exception as e:
                     logger.warning(f"Ошибка парсинга векторов: {e}")
+                    return False
+        
+        # Проверка для сложения векторов
+        elif 'сумма' in question.lower() and 'вектор' in question.lower():
+            vectors = re.findall(r'\[([^\]]+)\]', question)
+            if len(vectors) >= 2:
+                try:
+                    v1 = [int(x.strip()) for x in vectors[0].split(',')]
+                    v2 = [int(x.strip()) for x in vectors[1].split(',')]
+                    
+                    if len(v1) == len(v2):
+                        correct_result = [a + b for a, b in zip(v1, v2)]
+                        
+                        # Проверяем, есть ли правильный ответ в вариантах
+                        for option in options:
+                            if str(correct_result) in option:
+                                logger.info(f"Сложение векторов: векторы {v1} и {v2}, правильный ответ: {correct_result}")
+                                return True
+                        
+                        logger.warning(f"Сложение векторов: правильный ответ {correct_result} не найден в вариантах {options}")
+                        return False
+                except Exception as e:
+                    logger.warning(f"Ошибка парсинга векторов для сложения: {e}")
                     return False
         
         # Проверка для умножения матрицы на вектор
