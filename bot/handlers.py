@@ -11,12 +11,35 @@ from aiogram.filters import Command
 
 from bot.dialog import clear_dialog, add_user_message, add_assistant_message, get_dialog_history, extract_user_level
 from bot.prompts import get_system_prompt, get_welcome_message
-from bot.progress import LearningProgressTracker
+from bot.progress import get_user_progress, mark_topic_completed
 from llm.client import get_llm_response
 from bot.database import Database
 from bot.test_prompts import TEST_GENERATION_PROMPT
 
 logger = logging.getLogger(__name__)
+
+# Простой класс-обертка для совместимости с существующим кодом
+class LearningProgressTracker:
+    def __init__(self):
+        pass
+    
+    def get_user_stats(self, user_id: int) -> dict:
+        """Получить статистику пользователя"""
+        progress = get_user_progress(user_id)
+        return {
+            'topics_studied': len(progress),
+            'learning_time': '0 мин'  # Заглушка
+        }
+    
+    def update_progress(self, user_id: int, question: str, response: str):
+        """Обновить прогресс пользователя"""
+        # Простая логика: если в ответе есть ключевые слова, отмечаем тему как изученную
+        if any(keyword in question.lower() for keyword in ['вектор', 'матрица', 'собственн']):
+            mark_topic_completed(user_id, 'math_vectors_operations')
+        elif any(keyword in question.lower() for keyword in ['матриц', 'умножен', 'транспон']):
+            mark_topic_completed(user_id, 'math_matrices_operations')
+        elif any(keyword in question.lower() for keyword in ['собственн', 'eigen', 'характерист']):
+            mark_topic_completed(user_id, 'math_eigenvalues_vectors')
 
 # Инициализация трекера прогресса
 progress_tracker = LearningProgressTracker()
