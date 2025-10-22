@@ -130,6 +130,35 @@ async def handle_status(message: Message):
     await message.answer(status_message)
 
 
+async def handle_learn(message: Message):
+    """
+    Обработка команды /learn
+    
+    Показывает список доступных учебных курсов
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    username = message.from_user.username or "пользователь"
+    chat_id = message.chat.id
+    
+    logger.info(f"Команда /learn от пользователя {user_id} (@{username})")
+    
+    # Создаем кнопки для выбора курса
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📐 Math", callback_data="course_math")],
+        [InlineKeyboardButton(text="🤖 ML", callback_data="course_ml")]
+    ])
+    
+    await message.answer(
+        "📚 **Список доступных учебных курсов**\n\n"
+        "Выберите курс для изучения:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+
+
 async def handle_message(message: Message):
     """
     Обработка текстовых сообщений через LLM с сохранением контекста
@@ -500,6 +529,178 @@ async def handle_level_selection(callback_query: CallbackQuery):
         await callback_query.answer("Неизвестный уровень")
 
 
+async def handle_course_selection(callback_query: CallbackQuery):
+    """
+    Обработка выбора курса обучения через кнопки
+    
+    Args:
+        callback_query: Объект callback query от нажатия кнопки
+    """
+    chat_id = callback_query.message.chat.id
+    user_id = callback_query.from_user.id
+    username = callback_query.from_user.username or "пользователь"
+    
+    logger.info(f"Выбран курс {callback_query.data} пользователем {user_id} (@{username})")
+    
+    if callback_query.data == "course_math":
+        # Создаем кнопки для курса Math
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Начать обучение", callback_data="start_math_course")],
+            [InlineKeyboardButton(text="📋 Посмотреть план курса", callback_data="show_math_plan")],
+            [InlineKeyboardButton(text="⬅️ Вернуться к списку курсов", callback_data="back_to_courses")]
+        ])
+        
+        await callback_query.message.edit_text(
+            "📐 **Курс: Математические основы ML**\n\n"
+            "Выберите действие:",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+        
+    elif callback_query.data == "course_ml":
+        # Создаем кнопки для курса ML
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Начать обучение", callback_data="start_ml_course")],
+            [InlineKeyboardButton(text="📋 Посмотреть план курса", callback_data="show_ml_plan")],
+            [InlineKeyboardButton(text="⬅️ Вернуться к списку курсов", callback_data="back_to_courses")]
+        ])
+        
+        await callback_query.message.edit_text(
+            "🤖 **Курс: Машинное обучение**\n\n"
+            "Выберите действие:",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+    
+    await callback_query.answer()
+
+
+async def handle_course_action(callback_query: CallbackQuery):
+    """
+    Обработка действий с курсами (план курса, начало обучения, возврат)
+    
+    Args:
+        callback_query: Объект callback query от нажатия кнопки
+    """
+    chat_id = callback_query.message.chat.id
+    user_id = callback_query.from_user.id
+    username = callback_query.from_user.username or "пользователь"
+    
+    logger.info(f"Действие курса {callback_query.data} пользователем {user_id} (@{username})")
+    
+    if callback_query.data == "show_math_plan":
+        # Показываем план курса Math
+        math_plan = """📚 **МАТЕМАТИЧЕСКИЕ ОСНОВЫ ML**
+
+▲ **ЛИНЕЙНАЯ АЛГЕБРА**
+1. Векторы и операции
+2. Матрицы и основные операции
+3. Собственные значения и векторы
+4. Ортогональность и проекции
+5. SVD и PCA
+
+▲ **МАТАН И ОПТИМИЗАЦИЯ**
+6. Производные и частные производные
+7. Градиенты и цепное правило 
+8. Градиенты в матричной форме
+9. Градиентный спуск (GD, SGD)
+10. Adam и другие оптимизаторы
+11. Выпуклые и невыпуклые функции
+12. Функции потерь (MSE, Cross-Entropy)
+13. Регуляризация (L1, L2)
+
+▲ **ВЕРОЯТНОСТЬ И СТАТИСТИКА**
+14. Случайные величины и распределения
+15. Матожидание, дисперсия, ковариация
+16. Байесовская теорема
+17. Maximum Likelihood Estimation (MLE)
+18. Энтропия и дивергенции"""
+        
+        # Создаем кнопку возврата
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Вернуться к курсу", callback_data="course_math")]
+        ])
+        
+        await callback_query.message.edit_text(
+            math_plan,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+        
+    elif callback_query.data == "show_ml_plan":
+        # Показываем план курса ML
+        ml_plan = """🤖 **КУРС: МАШИННОЕ ОБУЧЕНИЕ**
+
+▲ **ОСНОВЫ ML**
+1. Что такое машинное обучение
+2. Типы задач ML (классификация, регрессия, кластеризация)
+3. Обучение с учителем vs без учителя
+4. Переобучение и недообучение
+5. Валидация и тестирование
+
+▲ **АЛГОРИТМЫ**
+6. Линейная регрессия
+7. Логистическая регрессия
+8. Деревья решений
+9. Случайный лес
+10. SVM
+11. K-means кластеризация
+12. Нейронные сети
+
+▲ **ПРАКТИКА**
+13. Работа с данными (pandas, numpy)
+14. Визуализация (matplotlib, seaborn)
+15. Scikit-learn
+16. Оценка качества моделей
+17. Feature Engineering
+18. Реальные проекты"""
+        
+        # Создаем кнопку возврата
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Вернуться к курсу", callback_data="course_ml")]
+        ])
+        
+        await callback_query.message.edit_text(
+            ml_plan,
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+        
+    elif callback_query.data == "back_to_courses":
+        # Возвращаемся к списку курсов
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📐 Math", callback_data="course_math")],
+            [InlineKeyboardButton(text="🤖 ML", callback_data="course_ml")]
+        ])
+        
+        await callback_query.message.edit_text(
+            "📚 **Список доступных учебных курсов**\n\n"
+            "Выберите курс для изучения:",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+        
+    elif callback_query.data == "start_math_course":
+        await callback_query.message.edit_text(
+            "🚀 **Начинаем курс: Математические основы ML**\n\n"
+            "Отлично! Мы начнем с основ линейной алгебры.\n\n"
+            "Задавайте вопросы по любой теме курса, и я объясню её подробно с примерами!",
+            reply_markup=None,
+            parse_mode="Markdown"
+        )
+        
+    elif callback_query.data == "start_ml_course":
+        await callback_query.message.edit_text(
+            "🚀 **Начинаем курс: Машинное обучение**\n\n"
+            "Отлично! Мы начнем с основ машинного обучения.\n\n"
+            "Задавайте вопросы по любой теме курса, и я объясню её подробно с примерами!",
+            reply_markup=None,
+            parse_mode="Markdown"
+        )
+    
+    await callback_query.answer()
+
+
 async def handle_voice(message: Message):
     """
     Обработка голосовых сообщений
@@ -664,8 +865,20 @@ def register_handlers(dp: Dispatcher):
     # Обработчик команды /status - показ текущего уровня
     dp.message.register(handle_status, Command("status"))
     
+    # Обработчик команды /learn - список курсов
+    dp.message.register(handle_learn, Command("learn"))
+    
     # Обработчик нажатий на кнопки выбора уровня
-    dp.callback_query.register(handle_level_selection)
+    dp.callback_query.register(handle_level_selection, F.data.startswith("level_"))
+    
+    # Обработчик нажатий на кнопки выбора курса
+    dp.callback_query.register(handle_course_selection, F.data.startswith("course_"))
+    
+    # Обработчик действий с курсами (план, начало обучения, возврат)
+    dp.callback_query.register(handle_course_action, F.data.in_([
+        "show_math_plan", "show_ml_plan", "back_to_courses", 
+        "start_math_course", "start_ml_course"
+    ]))
     
     # Обработчик голосовых сообщений (должен быть перед общим обработчиком сообщений)
     dp.message.register(handle_voice, F.voice)
