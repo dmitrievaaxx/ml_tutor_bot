@@ -80,7 +80,7 @@ async def handle_start(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🟢 Начинающий", callback_data="level_beginner"),
-            InlineKeyboardButton(text="🟡 Средний", callback_data="level_intermediate")
+            InlineKeyboardButton(text="🟡 Базовый", callback_data="level_intermediate")
         ],
         [
             InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")
@@ -155,7 +155,7 @@ async def handle_level(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🟢 Начинающий", callback_data="level_beginner"),
-            InlineKeyboardButton(text="🟡 Средний", callback_data="level_intermediate")
+            InlineKeyboardButton(text="🟡 Базовый", callback_data="level_intermediate")
         ],
         [
             InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")
@@ -389,24 +389,33 @@ async def handle_level_selection(callback_query: CallbackQuery):
         callback_query: Объект callback query от пользователя
     """
     user_id = callback_query.from_user.id
+    chat_id = callback_query.message.chat.id
     data = callback_query.data
     
-    # Маппинг callback_data на уровни
+    # Маппинг callback_data на уровни (используем те же названия, что и в extract_user_level)
     level_map = {
-        "level_beginner": "Базовый",
-        "level_intermediate": "Средний", 
+        "level_beginner": "Новичок",
+        "level_intermediate": "Базовый", 
         "level_advanced": "Продвинутый"
     }
     
     if data in level_map:
         level = level_map[data]
         
+        # Добавляем выбранный уровень в историю диалога
+        add_user_message(chat_id, level)
+        
         # Обновляем уровень пользователя (в реальной реализации здесь была бы БД)
         logger.info(f"Пользователь {user_id} изменил уровень на: {level}")
         
+        # Получаем приветственное сообщение для выбранного уровня
+        welcome_message = get_welcome_message(level)
+        
+        # Отправляем сообщение с подтверждением и приветствием
         await callback_query.message.edit_text(
-            f"✅ Уровень знаний изменен на: **{level}**\n\n"
-            "Теперь я буду адаптировать ответы под ваш уровень знаний.",
+            f"✅ Уровень знаний установлен: **{level}**\n\n"
+            f"{welcome_message}\n\n"
+            "Теперь я буду адаптировать ответы под ваш уровень знаний. Задавайте любые вопросы!",
             parse_mode="Markdown"
         )
         await callback_query.answer()
@@ -435,12 +444,6 @@ async def handle_message(message: Message):
     
     # Получаем историю диалога
     dialog_history = get_dialog_history(chat_id)
-    
-    # Определяем уровень пользователя
-    user_level = extract_user_level(chat_id)
-    
-    # Формируем системный промпт с учетом уровня
-    system_prompt = get_system_prompt(user_level)
     
     # Отправляем запрос к LLM
     try:
