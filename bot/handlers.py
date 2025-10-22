@@ -5,6 +5,7 @@
 """
 
 import logging
+from string import Template
 from aiogram import Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
@@ -549,9 +550,11 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         
         # Безопасно форматируем промпт
         try:
-            prompt = TEST_GENERATION_PROMPT.format(
-                lesson_title=lesson.title.replace('{', '{{').replace('}', '}}'),
-                lesson_content=lesson.content.replace('{', '{{').replace('}', '}}')
+            # Используем Template для безопасного форматирования
+            template = Template(TEST_GENERATION_PROMPT)
+            prompt = template.safe_substitute(
+                lesson_title=lesson.title,
+                lesson_content=lesson.content
             )
         except Exception as format_error:
             logger.error(f"Ошибка форматирования промпта: {format_error}")
@@ -643,9 +646,10 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                 logger.warning(f"Математически некорректный ответ, генерируем новый")
                 # Попробуем сгенерировать еще раз с новым промптом
                 try:
-                    retry_prompt = TEST_GENERATION_PROMPT.format(
-                        lesson_title=lesson.title.replace('{', '{{').replace('}', '}}'),
-                        lesson_content=lesson.content.replace('{', '{{').replace('}', '}}')
+                    retry_template = Template(TEST_GENERATION_PROMPT)
+                    retry_prompt = retry_template.safe_substitute(
+                        lesson_title=lesson.title,
+                        lesson_content=lesson.content
                     )
                     response = await get_llm_response([{"role": "user", "content": retry_prompt}])
                 except Exception as retry_error:

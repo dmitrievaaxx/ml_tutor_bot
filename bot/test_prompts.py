@@ -4,8 +4,8 @@ Test generation prompts for ML Tutor Bot
 
 TEST_GENERATION_PROMPT = """Ты - эксперт по машинному обучению и математике. Создай тестовый вопрос по теме урока.
 
-ТЕМА УРОКА: {lesson_title}
-КОНТЕНТ УРОКА: {lesson_content}
+ТЕМА УРОКА: $lesson_title
+КОНТЕНТ УРОКА: $lesson_content
 
 КРИТИЧЕСКИ ВАЖНЫЕ ТРЕБОВАНИЯ:
 1. Используй ТОЛЬКО простой текст без LaTeX, Markdown, формул, символов \( \), \mathbf{}, \cdot
