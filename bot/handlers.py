@@ -413,16 +413,6 @@ async def handle_course_selection(callback_query: CallbackQuery):
         await callback_query.answer()
 
 
-async def handle_main_menu_buttons(callback_query: CallbackQuery):
-    """
-    Обработка кнопок главного меню
-    
-    Args:
-        callback_query: Объект callback query от пользователя
-    """
-    data = callback_query.data
-        
-
 async def handle_level_selection(callback_query: CallbackQuery):
     """
     Обработка выбора уровня знаний
@@ -1318,11 +1308,6 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(handle_course_selection, F.data.startswith("course_"))
     dp.callback_query.register(handle_course_selection, F.data == "back_to_main")
     dp.callback_query.register(handle_course_selection, F.data == "back_to_courses")
-    
-    # Обработчик кнопок главного меню
-    dp.callback_query.register(handle_main_menu_buttons, F.data.in_([
-        "show_profile", "show_errors"
-    ]))
     
     # Обработчики для курсов
     dp.callback_query.register(handle_lesson_callback, F.data.startswith("lesson_"))
