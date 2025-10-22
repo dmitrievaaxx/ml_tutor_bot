@@ -240,7 +240,6 @@ async def handle_status(message: Message):
         status_text += "\n"
     
     status_text += f"📈 **Статистика:**\n"
-    status_text += f"• Всего вопросов: {len(dialog_history)}\n"
     status_text += f"• Успешных тестов: {progress_stats.get('successful_tests', 0)}\n"
     status_text += f"• Ошибок в тестах: {progress_stats.get('test_errors', 0)}\n"
     status_text += f"• Время обучения: {progress_stats.get('learning_time', '0 мин')}\n"
@@ -267,8 +266,6 @@ async def handle_help(message: Message):
 • `/learn` - Выбрать курс для изучения
 • `/level` - Изменить уровень знаний
 • `/status` - Показать текущий статус
-• `/profile` - Мой профиль
-• `/errors` - Мои ошибки в тестах
 • `/help` - Показать эту справку
 
 **Как пользоваться:**
@@ -424,14 +421,6 @@ async def handle_main_menu_buttons(callback_query: CallbackQuery):
         callback_query: Объект callback query от пользователя
     """
     data = callback_query.data
-    
-    if data == "show_profile":
-        await handle_profile_command(callback_query.message)
-        await callback_query.answer()
-    
-    elif data == "show_errors":
-        await handle_errors_command(callback_query.message)
-        await callback_query.answer()
         
 
 async def handle_level_selection(callback_query: CallbackQuery):
@@ -993,89 +982,6 @@ async def handle_test_answer(callback_query: CallbackQuery):
         await callback_query.answer()
         
 
-async def handle_profile_command(message: Message):
-    """
-    Обработка команды /profile - показ прогресса пользователя
-    """
-    user_id = message.from_user.id
-    
-    # Получаем статистику по всем курсам
-    courses_stats = []
-    for course_id in range(1, 10):  # Предполагаем максимум 10 курсов
-        course = db.get_course(course_id)
-        if course:
-            stats = db.get_user_course_stats(user_id, course_id)
-            if stats['completed_lessons'] > 0 or stats['current_lesson'] > 1:
-                courses_stats.append({
-                    'name': course.name,
-                    'current': stats['current_lesson'],
-                    'total': course.total_lessons,
-                    'completed': stats['completed_lessons'],
-                    'errors': stats['error_count']
-                })
-    
-    if not courses_stats:
-        await message.answer("📊 Вы еще не начали изучать курсы. Используйте /learn для начала.")
-        return
-        
-    # Формируем сообщение профиля
-    profile_text = "👤 Ваш профиль:\n\n"
-    
-    for stats in courses_stats:
-        profile_text += f"📚 {stats['name']}: {stats['completed']}/{stats['total']} уроков завершено\n"
-        profile_text += f"📍 Текущий урок: {stats['current']}/{stats['total']}\n"
-        profile_text += f"❌ Ошибок в тестах: {stats['errors']}\n\n"
-    
-    profile_text += "Используйте /errors для просмотра ошибок в тестах."
-    
-    await message.answer(profile_text)
-
-
-async def handle_errors_command(message: Message):
-    """
-    Обработка команды /errors - показ ошибок пользователя
-    """
-    user_id = message.from_user.id
-    
-    errors = db.get_user_test_errors(user_id)
-    
-    if not errors:
-        await message.answer("✅ У вас нет ошибок в тестах!")
-        return
-        
-    # Группируем ошибки по урокам
-    errors_by_lesson = {}
-    for error in errors:
-        if error.lesson_id not in errors_by_lesson:
-            errors_by_lesson[error.lesson_id] = []
-        errors_by_lesson[error.lesson_id].append(error)
-    
-    errors_text = "❌ Ваши ошибки в тестах:\n\n"
-    
-    for lesson_id, lesson_errors in errors_by_lesson.items():
-        # Получаем информацию об уроке
-        lesson = None
-        for course_id in range(1, 10):
-            for lesson_num in range(1, 20):
-                l = db.get_lesson(course_id, lesson_num)
-                if l and l.id == lesson_id:
-                    lesson = l
-                    break
-            if lesson:
-                break
-        
-        if lesson:
-            errors_text += f"📘 {lesson.title}:\n"
-            for error in lesson_errors[:3]:  # Показываем только последние 3 ошибки
-                errors_text += f"• Вопрос: {error.question[:50]}...\n"
-                errors_text += f"  Правильный ответ: {error.correct_answer}\n"
-                errors_text += f"  Ваш ответ: {error.user_answer}\n\n"
-    
-    errors_text += "Попробуйте пройти тесты заново для улучшения результатов!"
-    
-    await message.answer(errors_text)
-
-
 async def handle_photo(message: Message):
     """
     Обработка фотографий с использованием Vision API
@@ -1403,12 +1309,6 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик команды /learn - выбор курсов
     dp.message.register(handle_learn, Command("learn"))
-    
-    # Обработчик команды /profile - профиль пользователя
-    dp.message.register(handle_profile_command, Command("profile"))
-    
-    # Обработчик команды /errors - ошибки в тестах
-    dp.message.register(handle_errors_command, Command("errors"))
     
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection, F.data.startswith("level_"))
