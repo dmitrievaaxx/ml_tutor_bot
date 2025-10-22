@@ -148,10 +148,13 @@ async def handle_level(message: Message):
     
     logger.info(f"Команда /level от пользователя {user_id}")
     
+    # Формируем сообщение для выбора уровня
+    level_text = """📊 Выбери свой уровень знаний:"""
+    
     # Создаем клавиатуру для выбора уровня
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="🟢 Базовый", callback_data="level_beginner"),
+            InlineKeyboardButton(text="🟢 Начинающий", callback_data="level_beginner"),
             InlineKeyboardButton(text="🟡 Средний", callback_data="level_intermediate")
         ],
         [
@@ -159,7 +162,7 @@ async def handle_level(message: Message):
         ]
     ])
     
-    await message.answer(welcome_text, reply_markup=keyboard)
+    await message.answer(level_text, reply_markup=keyboard)
 
 
 async def handle_status(message: Message):
@@ -797,14 +800,14 @@ async def handle_test_answer(callback_query: CallbackQuery):
                         InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
                     ]
                 ])
-                )
-            else:
-                # Сохраняем ошибку
-                db.add_test_error(user_id, lesson_id, "Тестовый вопрос", correct_answer, user_answer)
-                
-                await callback_query.message.edit_text(
-                    f"❌ Неправильно! Правильный ответ: {correct_answer}\n\n"
-                    "Попробуйте еще раз с новым вопросом.",
+            )
+        else:
+            # Сохраняем ошибку
+            db.add_test_error(user_id, lesson_id, "Тестовый вопрос", correct_answer, user_answer)
+            
+            await callback_query.message.edit_text(
+                f"❌ Неправильно! Правильный ответ: {correct_answer}\n\n"
+                "Попробуйте еще раз с новым вопросом.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [
                         InlineKeyboardButton(text="🔄 Новый вопрос", callback_data=f"test_{lesson_id}"),
@@ -839,7 +842,7 @@ async def handle_profile_command(message: Message):
     
     if not courses_stats:
         await message.answer("📊 Вы еще не начали изучать курсы. Используйте /learn для начала.")
-            return
+        return
         
     # Формируем сообщение профиля
     profile_text = "👤 Ваш профиль:\n\n"
@@ -864,7 +867,7 @@ async def handle_errors_command(message: Message):
     
     if not errors:
         await message.answer("✅ У вас нет ошибок в тестах!")
-            return
+        return
         
     # Группируем ошибки по урокам
     errors_by_lesson = {}
@@ -945,7 +948,7 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
                         
                         logger.warning(f"Скалярное произведение: правильный ответ {correct_result} не найден в вариантах {options}")
                         return False
-        except Exception as e:
+                except Exception as e:
                     logger.warning(f"Ошибка парсинга векторов: {e}")
                     return False
         
@@ -983,7 +986,7 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
                             
                             logger.warning(f"Умножение матрицы на вектор: правильный ответ {result} не найден в вариантах {options}")
                             return False
-            except Exception as e:
+                except Exception as e:
                     logger.warning(f"Ошибка парсинга матрицы и вектора: {e}")
                     return False
         
@@ -1007,12 +1010,12 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
                         
                         logger.warning(f"Детерминант: правильный ответ {det} не найден в вариантах {options}")
                         return False
-        except Exception as e:
+                except Exception as e:
                     logger.warning(f"Ошибка парсинга детерминанта: {e}")
                     return False
-            
-        return True  # Для не-математических вопросов
-            except Exception as e:
+        
+        return True  # Для не-математических вопросов или если не удалось распарсить
+    except Exception as e:
         logger.warning(f"Ошибка валидации: {e}")
         return True  # В случае ошибки считаем валидным
 
