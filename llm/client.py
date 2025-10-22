@@ -112,6 +112,20 @@ async def get_llm_response(messages: list) -> str:
             # Извлечение текста ответа
             answer = response.choices[0].message.content
             
+            # Очистка ответа от токенов модели
+            if answer:
+                # Убираем токены начала и конца
+                answer = answer.strip()
+                if answer.startswith('<s>'):
+                    answer = answer[3:].strip()
+                if answer.endswith('</s>'):
+                    answer = answer[:-4].strip()
+                
+                # Убираем другие служебные токены
+                answer = answer.replace('[OUT]', '').strip()
+                answer = answer.replace('[INST]', '').strip()
+                answer = answer.replace('[/INST]', '').strip()
+            
             # Логирование ответа
             logger.info(
                 f"Ответ от LLM | Модель: {current_model} | Длина: {len(answer)} символов | "
@@ -173,6 +187,20 @@ async def get_llm_response_for_test(prompt: str) -> str:
             )
             
             answer = response.choices[0].message.content
+            
+            # Очистка ответа от токенов модели
+            if answer:
+                # Убираем токены начала и конца
+                answer = answer.strip()
+                if answer.startswith('<s>'):
+                    answer = answer[3:].strip()
+                if answer.endswith('</s>'):
+                    answer = answer[:-4].strip()
+                
+                # Убираем другие служебные токены
+                answer = answer.replace('[OUT]', '').strip()
+                answer = answer.replace('[INST]', '').strip()
+                answer = answer.replace('[/INST]', '').strip()
             
             logger.info(
                 f"Ответ от LLM для теста | Модель: {current_model} | Длина: {len(answer)} символов | "

@@ -442,6 +442,9 @@ async def handle_message(message: Message):
     # Добавляем сообщение пользователя в историю
     add_user_message(chat_id, text)
     
+    # Отправляем индикатор генерации
+    processing_msg = await message.answer("🤖 Формулирую понятное объяснение...")
+    
     # Получаем историю диалога
     dialog_history = get_dialog_history(chat_id)
     
@@ -449,18 +452,25 @@ async def handle_message(message: Message):
     try:
         response = await get_llm_response(dialog_history)
         
-        # Добавляем ответ в историю
-        add_assistant_message(chat_id, response)
-        
-        # Отправляем ответ пользователю
-        await message.answer(response)
-        
-        # Обновляем статистику прогресса
-        progress_tracker.update_progress(user_id, text, response)
+        if response:
+            # Добавляем ответ в историю
+            add_assistant_message(chat_id, response)
+            
+            # Отправляем ответ пользователю, заменяя индикатор
+            await processing_msg.edit_text(response)
+            
+            # Обновляем статистику прогресса
+            progress_tracker.update_progress(user_id, text, response)
+        else:
+            await processing_msg.edit_text(
+                "❌ Не удалось получить ответ. Попробуйте еще раз."
+            )
         
     except Exception as e:
         logger.error(f"Ошибка при обработке сообщения: {e}")
-        await message.answer("Извините, произошла ошибка при обработке вашего сообщения. Попробуйте еще раз.")
+        await processing_msg.edit_text(
+            "❌ Извините, произошла ошибка при обработке вашего сообщения. Попробуйте еще раз."
+        )
 
 
 async def show_lesson(message: Message, course_id: int, lesson_number: int):
