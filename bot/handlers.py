@@ -13,7 +13,7 @@ from aiogram.filters import Command
 from bot.dialog import clear_dialog, add_user_message, add_assistant_message, get_dialog_history, extract_user_level
 from bot.prompts import get_system_prompt, get_welcome_message
 from bot.progress import get_user_progress, mark_topic_completed
-from llm.client import get_llm_response
+from llm.client import get_llm_response, get_llm_response_for_test
 from bot.database import Database
 from bot.test_prompts import TEST_GENERATION_PROMPT
 
@@ -593,7 +593,8 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         
         logger.info(f"Промпт сформирован, длина: {len(prompt)} символов")
         
-        response = await get_llm_response([{"role": "user", "content": prompt}])
+        # Используем специальные параметры для генерации тестов
+        response = await get_llm_response_for_test(prompt)
         
         logger.info(f"Ответ LLM для генерации теста: {response[:300]}...")
         
@@ -601,8 +602,16 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         clean_response = response.strip()
         if clean_response.startswith('<s>'):
             clean_response = clean_response[3:].strip()
-        if clean_response.startswith('</s>'):
+        if clean_response.endswith('</s>'):
             clean_response = clean_response[:-4].strip()
+        
+        # Проверяем, что ответ не пустой и содержит достаточно информации
+        if len(clean_response) < 10 or clean_response in ['<s>', '</s>', '<s></s>']:
+            logger.warning(f"LLM вернул слишком короткий ответ: '{clean_response}'")
+            await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+            return
+        
+        logger.info(f"Очищенный ответ LLM: {clean_response[:200]}...")
         
         # Парсим ответ
         lines = clean_response.split('\n')
@@ -681,7 +690,7 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                         lesson_title=lesson.title,
                         lesson_content=lesson.content
                     )
-                    response = await get_llm_response([{"role": "user", "content": retry_prompt}])
+                    response = await get_llm_response_for_test(retry_prompt)
                 except Exception as retry_error:
                     logger.error(f"Ошибка повторной генерации: {retry_error}")
                     await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
@@ -723,8 +732,31 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                     correct_answer = 'C'
         
         if not question or len(options) != 3 or not correct_answer:
+            logger.warning(f"LLM не смог сгенерировать валидный тест, создаем fallback вопрос")
+            
+            # Создаем простой fallback вопрос на основе темы урока
+            if "вектор" in lesson.title.lower():
+                question = "Что такое вектор в математике?"
+                options = ["Направленный отрезок", "Число", "Точка"]
+                correct_answer = "A"
+            elif "матрица" in lesson.title.lower():
+                question = "Что такое матрица?"
+                options = ["Прямоугольная таблица чисел", "Вектор", "Функция"]
+                correct_answer = "A"
+            elif "собственн" in lesson.title.lower():
+                question = "Что такое собственное значение матрицы?"
+                options = ["Число λ такое, что Av = λv", "Определитель", "След"]
+                correct_answer = "A"
+            else:
+                question = "Что изучается в этом уроке?"
+                options = ["Математические концепции", "История", "Литература"]
+                correct_answer = "A"
+            
+            logger.info(f"Создан fallback вопрос: {question}")
+        
+        if not question or len(options) != 3 or not correct_answer:
             await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
-            logger.error(f"Не удалось сгенерировать тест. Вопрос: '{question}', Варианты: {options}, Правильный: '{correct_answer}'")
+            logger.error(f"Не удалось сгенерировать тест даже с fallback. Вопрос: '{question}', Варианты: {options}, Правильный: '{correct_answer}'")
             logger.error(f"Полный ответ LLM: {clean_response}")
             return
         

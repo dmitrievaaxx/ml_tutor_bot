@@ -128,3 +128,65 @@ async def get_llm_response(messages: list) -> str:
             else:
                 logger.error("Все модели недоступны")
                 return ""
+
+
+async def get_llm_response_for_test(prompt: str) -> str:
+    """
+    Специальная функция для генерации тестовых вопросов с увеличенными параметрами
+    
+    Args:
+        prompt: Промпт для генерации теста
+        
+    Returns:
+        str: Ответ от LLM
+    """
+    logger.info("get_llm_response_for_test вызвана")
+    try:
+        client = get_openai_client()
+    except ValueError as e:
+        logger.error(f"Ошибка инициализации клиента: {e}")
+        return ""
+    
+    # Специальные параметры для генерации тестов
+    fallback_models = [
+        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - более стабильная
+        'mistralai/mistral-7b-instruct:free',         # Mistral 7B
+        'meta-llama/llama-3.1-8b-instruct:free',     # Llama 3.1 8B
+        'huggingfaceh4/zephyr-7b-beta:free',          # Zephyr 7B
+    ]
+    
+    # Увеличенные параметры для генерации тестов
+    temperature = 0.3  # Более детерминированный ответ
+    max_tokens = 200   # Больше токенов для полного ответа
+    
+    logger.info(f"Генерация теста | Модели: {len(fallback_models)} | Макс токенов: {max_tokens}")
+    
+    for attempt, current_model in enumerate(fallback_models):
+        try:
+            logger.info(f"Попытка {attempt + 1}: используем модель {current_model}")
+            
+            response = await client.chat.completions.create(
+                model=current_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            answer = response.choices[0].message.content
+            
+            logger.info(
+                f"Ответ от LLM для теста | Модель: {current_model} | Длина: {len(answer)} символов | "
+                f"Начало: {answer[:50]}{'...' if len(answer) > 50 else ''}"
+            )
+            
+            return answer
+            
+        except Exception as e:
+            logger.error(f"Ошибка с моделью {current_model}: {type(e).__name__}: {e}")
+            if attempt < len(fallback_models) - 1:
+                logger.info(f"Пробуем следующую модель...")
+                continue
+            else:
+                logger.error("Все модели недоступны для генерации тестов")
+    
+    return ""
