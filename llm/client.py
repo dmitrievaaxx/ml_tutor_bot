@@ -81,10 +81,13 @@ async def get_llm_response(messages: list) -> str:
     # Список моделей в порядке приоритета (только доступные модели)
     fallback_models = [
         'meta-llama/llama-3.3-70b-instruct:free',    # Llama 3.3 70B - основная модель
-        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 1
-        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 2
-        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 3
-        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 4
+        'google/gemini-2.0-flash-exp:free',           # Gemini 2.0 Flash - fallback 1
+        'mistralai/mistral-small-3.2-24b-instruct:free', # Mistral Small 3.2 - fallback 2
+        'meta-llama/llama-4-maverick:free',           # Llama 4 Maverick - fallback 3
+        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 4
+        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 5
+        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 6
+        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 7
     ]
     
     model = os.getenv('LLM_MODEL', fallback_models[0])
@@ -165,10 +168,13 @@ async def get_llm_response_for_test(prompt: str) -> str:
     # Специальные параметры для генерации тестов
     fallback_models = [
         'meta-llama/llama-3.3-70b-instruct:free',    # Llama 3.3 70B - основная модель
-        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 1
-        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 2
-        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 3
-        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 4
+        'google/gemini-2.0-flash-exp:free',           # Gemini 2.0 Flash - fallback 1
+        'mistralai/mistral-small-3.2-24b-instruct:free', # Mistral Small 3.2 - fallback 2
+        'meta-llama/llama-4-maverick:free',           # Llama 4 Maverick - fallback 3
+        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 4
+        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 5
+        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 6
+        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 7
     ]
     
     # Увеличенные параметры для генерации тестов

@@ -25,6 +25,9 @@ def get_vision_client():
     """
     global _vision_client
     
+    # Принудительно пересоздаем клиент для обновления настроек
+    _vision_client = None
+    
     if _vision_client is None:
         logger.info("Создаем новый Vision клиент...")
         api_key = os.getenv('OPENROUTER_API_KEY')
@@ -78,31 +81,33 @@ async def get_vision_response(messages: list, image_base64: str, image_format: s
         logger.error(f"Ошибка инициализации Vision клиента: {e}")
         return ""
     
-    # Получение параметров модели из переменных окружения
-    # Список Vision моделей в порядке приоритета
+    # Список Vision моделей в порядке приоритета (только модели с поддержкой изображений)
+    # НЕ используем переменные окружения - только проверенные Vision модели
     fallback_models = [
-        'meta-llama/llama-3.3-70b-instruct:free',    # Llama 3.3 70B - основная модель с Vision
-        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 1
-        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 2
-        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 3
-        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 4
+        'mistralai/mistral-small-3.2-24b-instruct:free', # Mistral Small 3.2 - основная Vision модель
+        'meta-llama/llama-4-maverick:free',           # Llama 4 Maverick - fallback 1
+        'meta-llama/llama-4-scout:free',              # Llama 4 Scout - fallback 2
+        'qwen/qwen2.5-vl-32b-instruct:free',          # Qwen2.5 VL 32B - fallback 3
+        'google/gemini-2.0-flash-exp:free',           # Gemini 2.0 Flash - fallback 4
     ]
     
-    model = os.getenv('VISION_MODEL', fallback_models[0])
+    # Используем только наш список Vision моделей, игнорируем переменные окружения
     temperature = float(os.getenv('LLM_TEMPERATURE', '0.7'))
     max_tokens = int(os.getenv('LLM_MAX_TOKENS', '1000'))
     
     # Логирование запроса
     logger.info(
-        f"Запрос к Vision API | Модель: {model} | "
+        f"Запрос к Vision API | Первая модель: {fallback_models[0]} | "
         f"Сообщений в истории: {len(messages)} | "
         f"Размер изображения: {len(image_base64)} символов base64"
     )
+    logger.info(f"Доступные Vision модели: {fallback_models}")
     
     # Пробуем разные модели, если основная не работает
     for attempt, current_model in enumerate(fallback_models):
         try:
             logger.info(f"Попытка {attempt + 1}: используем Vision модель {current_model}")
+            logger.info(f"Всего доступно Vision моделей: {len(fallback_models)}")
             
             # Формируем запрос с изображением
             vision_messages = messages.copy()
