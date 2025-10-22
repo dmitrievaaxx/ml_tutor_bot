@@ -255,15 +255,66 @@ async def handle_course_selection(callback_query: CallbackQuery):
         plan_text += f"📊 Прогресс: {progress.completed_lessons}/{course.total_lessons} уроков завершено\n"
         plan_text += f"📍 Текущий урок: {progress.current_lesson}/{course.total_lessons}\n\n"
         
-        # Показываем уроки с галочками
-        plan_text += "📋 План курса:\n"
-        for i in range(1, course.total_lessons + 1):
+        # Показываем уроки с галочками по разделам
+        plan_text += "📋 План курса:\n\n"
+        
+        # ЛИНЕЙНАЯ АЛГЕБРА
+        plan_text += "▲ ЛИНЕЙНАЯ АЛГЕБРА\n"
+        linear_algebra_lessons = [
+            "Векторы и операции",
+            "Матрицы и основные операции", 
+            "Собственные значения и векторы",
+            "Ортогональность и проекции",
+            "SVD и PCA"
+        ]
+        
+        for i, lesson_title in enumerate(linear_algebra_lessons, 1):
             lesson = db.get_lesson(course_id, i)
             if lesson:
-                # Проверяем, завершен ли урок
                 is_completed = progress.completed_lessons >= i
                 status = "✅" if is_completed else "⭕"
-                plan_text += f"{status} Урок {i}: {lesson.title}\n"
+                plan_text += f"{status} {i}. {lesson_title}\n"
+            else:
+                plan_text += f"⭕ {i}. {lesson_title}\n"
+        
+        plan_text += "\n▲ МАТАН И ОПТИМИЗАЦИЯ\n"
+        math_optimization_lessons = [
+            "Производные и частные производные",
+            "Градиенты и цепное правило",
+            "Градиенты в матричной форме", 
+            "Градиентный спуск (GD, SGD)",
+            "Adam и другие оптимизаторы",
+            "Выпуклые и невыпуклые функции",
+            "Функции потерь (MSE, Cross-Entropy)",
+            "Регуляризация (L1, L2)"
+        ]
+        
+        for i, lesson_title in enumerate(math_optimization_lessons, 6):
+            lesson = db.get_lesson(course_id, i)
+            if lesson:
+                is_completed = progress.completed_lessons >= i
+                status = "✅" if is_completed else "⭕"
+                plan_text += f"{status} {i}. {lesson_title}\n"
+            else:
+                plan_text += f"⭕ {i}. {lesson_title}\n"
+        
+        plan_text += "\n▲ ВЕРОЯТНОСТЬ И СТАТИСТИКА\n"
+        probability_stats_lessons = [
+            "Случайные величины и распределения",
+            "Матожидание, дисперсия, ковариация",
+            "Байесовская теорема",
+            "Maximum Likelihood Estimation (MLE)",
+            "Энтропия и дивергенции"
+        ]
+        
+        for i, lesson_title in enumerate(probability_stats_lessons, 14):
+            lesson = db.get_lesson(course_id, i)
+            if lesson:
+                is_completed = progress.completed_lessons >= i
+                status = "✅" if is_completed else "⭕"
+                plan_text += f"{status} {i}. {lesson_title}\n"
+            else:
+                plan_text += f"⭕ {i}. {lesson_title}\n"
         
         # Создаем клавиатуру
         keyboard_buttons = []
@@ -273,10 +324,6 @@ async def handle_course_selection(callback_query: CallbackQuery):
                 InlineKeyboardButton(text="🚀 Начать обучение", callback_data=f"start_learning_{course_id}")
             ])
         
-        keyboard_buttons.append([
-            InlineKeyboardButton(text="👤 Мой профиль", callback_data="show_profile"),
-            InlineKeyboardButton(text="❌ Мои ошибки", callback_data="show_errors")
-        ])
         
         keyboard_buttons.append([
             InlineKeyboardButton(text="← Назад к выбору курсов", callback_data="back_to_courses")
@@ -580,6 +627,47 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         elif correct_answer.startswith('C)'):
             correct_answer = 'C'
         
+        # Проверяем математическую корректность ответа
+        if _is_mathematical_question(question):
+            if not _validate_mathematical_answer(question, options, correct_answer):
+                logger.warning(f"Математически некорректный ответ, генерируем новый")
+                # Попробуем сгенерировать еще раз
+                response = await get_llm_response([{"role": "user", "content": prompt}])
+                clean_response = response.strip()
+                if clean_response.startswith('<s>'):
+                    clean_response = clean_response[3:].strip()
+                if clean_response.startswith('</s>'):
+                    clean_response = clean_response[:-4].strip()
+                
+                # Повторно парсим
+                lines = clean_response.split('\n')
+                question = ""
+                options = []
+                correct_answer = ""
+                
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith("Вопрос:"):
+                        question = line.replace("Вопрос:", "").strip()
+                    elif line.startswith("A)"):
+                        options.append(line.replace("A)", "").strip())
+                    elif line.startswith("B)"):
+                        options.append(line.replace("B)", "").strip())
+                    elif line.startswith("C)"):
+                        options.append(line.replace("C)", "").strip())
+                    elif line.startswith("Правильный ответ:"):
+                        correct_answer = line.replace("Правильный ответ:", "").strip()
+                
+                # Нормализуем правильный ответ еще раз
+                if correct_answer in ['A', 'B', 'C']:
+                    correct_answer = correct_answer
+                elif correct_answer.startswith('A)'):
+                    correct_answer = 'A'
+                elif correct_answer.startswith('B)'):
+                    correct_answer = 'B'
+                elif correct_answer.startswith('C)'):
+                    correct_answer = 'C'
+        
         if not question or len(options) != 3 or not correct_answer:
             await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
             logger.error(f"Не удалось сгенерировать тест. Вопрос: '{question}', Варианты: {options}, Правильный: '{correct_answer}'")
@@ -774,6 +862,108 @@ async def handle_voice(message: Message):
     
     # Пока что просто отвечаем, что функция в разработке
     await message.answer("🎤 Голосовые сообщения пока в разработке. Используйте текстовые сообщения.")
+
+
+def _is_mathematical_question(question: str) -> bool:
+    """Проверяет, является ли вопрос математическим"""
+    math_keywords = ['вектор', 'матрица', 'умножение', 'скалярное произведение', 'детерминант', 'равен', 'равна']
+    return any(keyword in question.lower() for keyword in math_keywords)
+
+
+def _validate_mathematical_answer(question: str, options: list, correct_answer: str) -> bool:
+    """Проверяет математическую корректность ответа"""
+    try:
+        import re
+        
+        # Проверка для скалярного произведения векторов
+        if 'скалярное произведение' in question.lower():
+            vectors = re.findall(r'\[([^\]]+)\]', question)
+            if len(vectors) >= 2:
+                try:
+                    v1 = [int(x.strip()) for x in vectors[0].split(',')]
+                    v2 = [int(x.strip()) for x in vectors[1].split(',')]
+                    
+                    if len(v1) == len(v2):
+                        correct_result = sum(a * b for a, b in zip(v1, v2))
+                        
+                        # Проверяем, есть ли правильный ответ в вариантах
+                        for option in options:
+                            if str(correct_result) in option:
+                                logger.info(f"Скалярное произведение: векторы {v1} и {v2}, правильный ответ: {correct_result}")
+                                return True
+                        
+                        logger.warning(f"Скалярное произведение: правильный ответ {correct_result} не найден в вариантах {options}")
+                        return False
+                except Exception as e:
+                    logger.warning(f"Ошибка парсинга векторов: {e}")
+                    return False
+        
+        # Проверка для умножения матрицы на вектор
+        elif 'матрица' in question.lower() and 'вектор' in question.lower():
+            vectors = re.findall(r'\[([^\]]+)\]', question)
+            if len(vectors) >= 2:
+                try:
+                    # Первый вектор - матрица (двумерная)
+                    matrix_rows = []
+                    vector = []
+                    
+                    # Парсим матрицу
+                    for i, vec in enumerate(vectors[:-1]):
+                        row = [int(x.strip()) for x in vec.split(',')]
+                        matrix_rows.append(row)
+                    
+                    # Последний вектор - вектор
+                    vector = [int(x.strip()) for x in vectors[-1].split(',')]
+                    
+                    if len(matrix_rows) > 0 and len(vector) > 0:
+                        # Вычисляем произведение матрицы на вектор
+                        result = []
+                        for row in matrix_rows:
+                            if len(row) == len(vector):
+                                dot_product = sum(a * b for a, b in zip(row, vector))
+                                result.append(dot_product)
+                        
+                        if result:
+                            # Проверяем, есть ли правильный ответ в вариантах
+                            for option in options:
+                                if str(result) in option or all(str(x) in option for x in result):
+                                    logger.info(f"Умножение матрицы на вектор: результат {result}")
+                                    return True
+                            
+                            logger.warning(f"Умножение матрицы на вектор: правильный ответ {result} не найден в вариантах {options}")
+                            return False
+                except Exception as e:
+                    logger.warning(f"Ошибка парсинга матрицы и вектора: {e}")
+                    return False
+        
+        # Проверка для детерминанта
+        elif 'детерминант' in question.lower():
+            vectors = re.findall(r'\[([^\]]+)\]', question)
+            if len(vectors) >= 2:
+                try:
+                    # Парсим матрицу 2x2
+                    row1 = [int(x.strip()) for x in vectors[0].split(',')]
+                    row2 = [int(x.strip()) for x in vectors[1].split(',')]
+                    
+                    if len(row1) == 2 and len(row2) == 2:
+                        det = row1[0] * row2[1] - row1[1] * row2[0]
+                        
+                        # Проверяем, есть ли правильный ответ в вариантах
+                        for option in options:
+                            if str(det) in option:
+                                logger.info(f"Детерминант: матрица {[row1, row2]}, результат: {det}")
+                                return True
+                        
+                        logger.warning(f"Детерминант: правильный ответ {det} не найден в вариантах {options}")
+                        return False
+                except Exception as e:
+                    logger.warning(f"Ошибка парсинга детерминанта: {e}")
+                    return False
+            
+        return True  # Для не-математических вопросов
+    except Exception as e:
+        logger.warning(f"Ошибка валидации: {e}")
+        return True  # В случае ошибки считаем валидным
 
 
 def register_handlers(dp: Dispatcher):

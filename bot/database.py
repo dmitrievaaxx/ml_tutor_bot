@@ -145,6 +145,48 @@ class Database:
         
         return course_id
     
+    def update_course(self, course_id: int, name: str = None, description: str = None, total_lessons: int = None):
+        """Update course information"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        updates = []
+        params = []
+        
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
+        if total_lessons is not None:
+            updates.append("total_lessons = ?")
+            params.append(total_lessons)
+        
+        if updates:
+            params.append(course_id)
+            cursor.execute(f"""
+                UPDATE courses 
+                SET {', '.join(updates)}
+                WHERE id = ?
+            """, params)
+            conn.commit()
+        
+        conn.close()
+    
+    def get_course_by_name(self, name: str):
+        """Get course by name"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM courses WHERE name = ?", (name,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return Course(id=row[0], name=row[1], description=row[2], total_lessons=row[3])
+        return None
+    
     def add_lesson(self, course_id: int, lesson_number: int, title: str, content: str):
         """Add a lesson to a course"""
         conn = self.get_connection()
