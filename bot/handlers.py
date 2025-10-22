@@ -9,7 +9,7 @@ from aiogram import Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
-from bot.dialog import clear_dialog, add_message, get_dialog_history, extract_user_level
+from bot.dialog import clear_dialog, add_user_message, add_assistant_message, get_dialog_history, extract_user_level
 from bot.prompts import get_system_prompt, get_welcome_message
 from bot.progress import LearningProgressTracker
 from llm.client import get_llm_response
@@ -339,7 +339,7 @@ async def handle_message(message: Message):
     logger.info(f"Сообщение от пользователя {user_id}: {text[:50]}...")
     
     # Добавляем сообщение пользователя в историю
-    add_message(chat_id, "user", text)
+    add_user_message(chat_id, text)
     
     # Получаем историю диалога
     dialog_history = get_dialog_history(chat_id)
@@ -355,7 +355,7 @@ async def handle_message(message: Message):
         response = await get_llm_response(text, user_id, dialog_history, system_prompt)
         
         # Добавляем ответ в историю
-        add_message(chat_id, "assistant", response)
+        add_assistant_message(chat_id, response)
         
         # Отправляем ответ пользователю
         await message.answer(response)
