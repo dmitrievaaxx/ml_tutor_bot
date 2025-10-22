@@ -893,9 +893,6 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
             ],
             [
                 InlineKeyboardButton(text=f"C) {options[2]}", callback_data=f"answer_{lesson_id}_C_{correct_answer}")
-            ],
-            [
-                InlineKeyboardButton(text="🔄 Новый вопрос", callback_data=f"test_{lesson_id}")
             ]
         ])
         
