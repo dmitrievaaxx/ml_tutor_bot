@@ -493,6 +493,9 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         await callback_query.answer("❌ Урок не найден.")
         return
     
+    # Показываем индикатор генерации теста
+    generating_msg = await callback_query.message.edit_text("🧪 Генерирую тестовый вопрос...")
+    
     # Генерируем тестовый вопрос
     try:
         prompt = TEST_GENERATION_PROMPT.format(
@@ -548,7 +551,24 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                     if len(options) < 3:
                         options.append(line[2:].strip())
                 elif "правильный" in line.lower() and ("A" in line or "B" in line or "C" in line):
-                    correct_answer = line.split()[-1].strip()
+                    # Ищем букву в строке с правильным ответом
+                    for char in ['A', 'B', 'C']:
+                        if char in line:
+                            correct_answer = char
+                            break
+        
+        # Если все еще нет правильного ответа, попробуем найти его в конце
+        if not correct_answer:
+            for line in reversed(lines):
+                line = line.strip()
+                if any(char in line for char in ['A', 'B', 'C']):
+                    # Ищем последнюю букву A, B или C в строке
+                    for char in ['C', 'B', 'A']:  # Проверяем в обратном порядке
+                        if char in line:
+                            correct_answer = char
+                            break
+                    if correct_answer:
+                        break
         
         # Нормализуем правильный ответ
         if correct_answer in ['A', 'B', 'C']:
@@ -563,6 +583,7 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         if not question or len(options) != 3 or not correct_answer:
             await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
             logger.error(f"Не удалось сгенерировать тест. Вопрос: '{question}', Варианты: {options}, Правильный: '{correct_answer}'")
+            logger.error(f"Полный ответ LLM: {clean_response}")
             return
             
         # Создаем клавиатуру с вариантами ответов
