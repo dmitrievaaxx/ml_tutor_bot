@@ -69,8 +69,28 @@ async def handle_start(message: Message):
     # Очистка истории при старте (начинаем с чистого листа)
     clear_dialog(chat_id)
     
-    welcome_text = get_welcome_message("Базовый")
-    await message.answer(welcome_text)
+    # Формируем приветственное сообщение
+    welcome_text = f"""Привет!👋
+
+Я помогу тебе разобраться в машинном обучении, нейросетях и NLP — от основ до продвинутых концепций. Задавай вопросы текстом, присылай изображения с формулами, схемами и диаграммами, или запиши голосовое сообщение — я всё объясню!
+
+📊 Выбери свой уровень знаний:"""
+    
+    # Создаем клавиатуру для выбора уровня
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🟢 Начинающий", callback_data="level_beginner"),
+            InlineKeyboardButton(text="🟡 Средний", callback_data="level_intermediate")
+        ],
+        [
+            InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")
+        ],
+        [
+            InlineKeyboardButton(text="📖 Курсы", callback_data="show_courses")
+        ]
+    ])
+    
+    await message.answer(welcome_text, reply_markup=keyboard)
 
 
 async def handle_learn(message: Message):
@@ -139,14 +159,7 @@ async def handle_level(message: Message):
         ]
     ])
     
-    await message.answer(
-        "📊 Выберите ваш уровень знаний:\n\n"
-        "🟢 **Базовый** - начинающий, изучаю основы\n"
-        "🟡 **Средний** - имею опыт, хочу углубить знания\n"
-        "🔴 **Продвинутый** - эксперт, нужны сложные темы",
-        reply_markup=keyboard,
-        parse_mode="Markdown"
-    )
+    await message.answer(welcome_text, reply_markup=keyboard)
 
 
 async def handle_status(message: Message):
@@ -243,7 +256,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
         if not course:
             await callback_query.answer("❌ Курс не найден.")
             return
-        
+            
         # Получаем прогресс пользователя
         progress = db.get_user_progress(user_id, course_id)
         if not progress:
@@ -275,7 +288,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
                 is_completed = progress.completed_lessons >= i
                 status = "✅" if is_completed else "⭕"
                 plan_text += f"{status} {i}. {lesson_title}\n"
-            else:
+                    else:
                 plan_text += f"⭕ {i}. {lesson_title}\n"
         
         plan_text += "\n▲ МАТАН И ОПТИМИЗАЦИЯ\n"
@@ -296,7 +309,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
                 is_completed = progress.completed_lessons >= i
                 status = "✅" if is_completed else "⭕"
                 plan_text += f"{status} {i}. {lesson_title}\n"
-            else:
+                        else:
                 plan_text += f"⭕ {i}. {lesson_title}\n"
         
         plan_text += "\n▲ ВЕРОЯТНОСТЬ И СТАТИСТИКА\n"
@@ -314,7 +327,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
                 is_completed = progress.completed_lessons >= i
                 status = "✅" if is_completed else "⭕"
                 plan_text += f"{status} {i}. {lesson_title}\n"
-            else:
+                        else:
                 plan_text += f"⭕ {i}. {lesson_title}\n"
         
         # Создаем клавиатуру
@@ -363,7 +376,7 @@ async def handle_main_menu_buttons(callback_query: CallbackQuery):
     elif data == "show_errors":
         await handle_errors_command(callback_query.message)
         await callback_query.answer()
-
+        
 
 async def handle_level_selection(callback_query: CallbackQuery):
     """
@@ -387,12 +400,17 @@ async def handle_level_selection(callback_query: CallbackQuery):
         
         # Обновляем уровень пользователя (в реальной реализации здесь была бы БД)
         logger.info(f"Пользователь {user_id} изменил уровень на: {level}")
-        
-        await callback_query.message.edit_text(
+            
+            await callback_query.message.edit_text(
             f"✅ Уровень знаний изменен на: **{level}**\n\n"
             "Теперь я буду адаптировать ответы под ваш уровень знаний.",
-            parse_mode="Markdown"
-        )
+                parse_mode="Markdown"
+            )
+        await callback_query.answer()
+    
+    elif data == "show_courses":
+        # Переход к выбору курсов
+        await handle_learn(callback_query.message)
         await callback_query.answer()
         
 
@@ -470,7 +488,7 @@ async def show_lesson(message: Message, course_id: int, lesson_number: int):
     
     # Кнопки управления
     keyboard_buttons.append([
-        InlineKeyboardButton(text="🏠 Назад", callback_data="back_to_menu"),
+        InlineKeyboardButton(text="🏠 Назад к курсу", callback_data=f"back_to_course_{course.id}"),
         InlineKeyboardButton(text="🧪 Тест", callback_data=f"test_{lesson.id}")
     ])
     
@@ -518,6 +536,15 @@ async def handle_lesson_callback(callback_query: CallbackQuery):
         await callback_query.message.delete()
         await handle_start(callback_query.message)
         await callback_query.answer()
+    
+    elif data.startswith("back_to_course_"):
+        # Возврат к плану курса
+        course_id = int(data.split("_")[-1])
+        await callback_query.message.delete()
+        # Создаем временный callback с правильными данными
+        callback_query.data = f"course_{course_id}"
+        await handle_course_selection(callback_query)
+        await callback_query.answer()
 
 
 async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
@@ -535,12 +562,12 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                 lesson = l
                 break
         if lesson:
-            break
-    
+                break
+        
     if not lesson:
         await callback_query.answer("❌ Урок не найден.")
-        return
-    
+            return
+        
     # Показываем индикатор генерации теста
     generating_msg = await callback_query.message.edit_text("🧪 Генерирую тестовый вопрос...")
     
@@ -655,7 +682,7 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                 except Exception as retry_error:
                     logger.error(f"Ошибка повторной генерации: {retry_error}")
                     await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
-                    return
+            return
                 clean_response = response.strip()
                 if clean_response.startswith('<s>'):
                     clean_response = clean_response[3:].strip()
@@ -696,10 +723,10 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
             logger.error(f"Не удалось сгенерировать тест. Вопрос: '{question}', Варианты: {options}, Правильный: '{correct_answer}'")
             logger.error(f"Полный ответ LLM: {clean_response}")
             return
-            
+        
         # Создаем клавиатуру с вариантами ответов
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
                 InlineKeyboardButton(text=f"A) {options[0]}", callback_data=f"answer_{lesson_id}_A_{correct_answer}"),
                 InlineKeyboardButton(text=f"B) {options[1]}", callback_data=f"answer_{lesson_id}_B_{correct_answer}")
             ],
@@ -769,12 +796,12 @@ async def handle_test_answer(callback_query: CallbackQuery):
                         InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
                     ]
                 ])
-            )
-        else:
+                )
+            else:
             # Сохраняем ошибку
             db.add_test_error(user_id, lesson_id, "Тестовый вопрос", correct_answer, user_answer)
-            
-            await callback_query.message.edit_text(
+                
+                    await callback_query.message.edit_text(
                 f"❌ Неправильно! Правильный ответ: {correct_answer}\n\n"
                 "Попробуйте еще раз с новым вопросом.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -786,7 +813,7 @@ async def handle_test_answer(callback_query: CallbackQuery):
             )
         
         await callback_query.answer()
-
+        
 
 async def handle_profile_command(message: Message):
     """
@@ -811,8 +838,8 @@ async def handle_profile_command(message: Message):
     
     if not courses_stats:
         await message.answer("📊 Вы еще не начали изучать курсы. Используйте /learn для начала.")
-        return
-    
+            return
+        
     # Формируем сообщение профиля
     profile_text = "👤 Ваш профиль:\n\n"
     
@@ -836,8 +863,8 @@ async def handle_errors_command(message: Message):
     
     if not errors:
         await message.answer("✅ У вас нет ошибок в тестах!")
-        return
-    
+            return
+        
     # Группируем ошибки по урокам
     errors_by_lesson = {}
     for error in errors:
@@ -917,7 +944,7 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
                         
                         logger.warning(f"Скалярное произведение: правильный ответ {correct_result} не найден в вариантах {options}")
                         return False
-                except Exception as e:
+        except Exception as e:
                     logger.warning(f"Ошибка парсинга векторов: {e}")
                     return False
         
@@ -955,7 +982,7 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
                             
                             logger.warning(f"Умножение матрицы на вектор: правильный ответ {result} не найден в вариантах {options}")
                             return False
-                except Exception as e:
+            except Exception as e:
                     logger.warning(f"Ошибка парсинга матрицы и вектора: {e}")
                     return False
         
@@ -979,12 +1006,12 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
                         
                         logger.warning(f"Детерминант: правильный ответ {det} не найден в вариантах {options}")
                         return False
-                except Exception as e:
+        except Exception as e:
                     logger.warning(f"Ошибка парсинга детерминанта: {e}")
                     return False
             
         return True  # Для не-математических вопросов
-    except Exception as e:
+            except Exception as e:
         logger.warning(f"Ошибка валидации: {e}")
         return True  # В случае ошибки считаем валидным
 
@@ -1022,6 +1049,7 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection, F.data.startswith("level_"))
+    dp.callback_query.register(handle_level_selection, F.data == "show_courses")
     
     # Обработчик выбора курсов
     dp.callback_query.register(handle_course_selection, F.data.startswith("course_"))
@@ -1038,6 +1066,7 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(handle_lesson_callback, F.data.startswith("test_"))
     dp.callback_query.register(handle_lesson_callback, F.data.startswith("start_learning_"))
     dp.callback_query.register(handle_lesson_callback, F.data == "back_to_menu")
+    dp.callback_query.register(handle_lesson_callback, F.data.startswith("back_to_course_"))
     dp.callback_query.register(handle_test_answer, F.data.startswith("answer_"))
     
     # Обработчик голосовых сообщений (должен быть перед общим обработчиком сообщений)
