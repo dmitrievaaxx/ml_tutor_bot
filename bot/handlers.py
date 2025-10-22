@@ -572,9 +572,16 @@ async def handle_lesson_callback(callback_query: CallbackQuery):
     elif data.startswith("back_to_course_"):
         # Возврат к плану курса
         course_id = int(data.split("_")[-1])
-        # Создаем временный callback с правильными данными
-        callback_query.data = f"course_{course_id}"
-        await handle_course_selection(callback_query)
+        # Создаем новый callback query с правильными данными
+        from aiogram.types import CallbackQuery
+        new_callback = CallbackQuery(
+            id=callback_query.id,
+            from_user=callback_query.from_user,
+            message=callback_query.message,
+            data=f"course_{course_id}",
+            chat_instance=callback_query.chat_instance
+        )
+        await handle_course_selection(new_callback)
 
 
 async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
