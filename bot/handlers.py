@@ -983,7 +983,7 @@ async def handle_test_answer(callback_query: CallbackQuery):
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [
                         InlineKeyboardButton(text="📖 Вернуться к уроку", callback_data=f"lesson_{course_id}_{lesson.lesson_number}"),
-                        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
+                        InlineKeyboardButton(text="📚 Меню курса", callback_data=f"back_to_course_{course_id}")
                     ]
                 ])
             )
