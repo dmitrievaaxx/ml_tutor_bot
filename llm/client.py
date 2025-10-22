@@ -80,10 +80,11 @@ async def get_llm_response(messages: list) -> str:
     # Получение параметров модели из переменных окружения
     # Список моделей в порядке приоритета (только доступные модели)
     fallback_models = [
-        'mistralai/mistral-7b-instruct:free',        # Mistral 7B - хорошо с многоязычностью
-        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - стабильная модель
-        'meta-llama/llama-3.1-8b-instruct:free',     # Llama 3.1 8B - больше параметров
-        'huggingfaceh4/zephyr-7b-beta:free',         # Zephyr 7B - альтернатива
+        'meta-llama/llama-3.3-70b-instruct:free',    # Llama 3.3 70B - основная модель
+        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 1
+        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 2
+        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 3
+        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 4
     ]
     
     model = os.getenv('LLM_MODEL', fallback_models[0])
@@ -163,10 +164,11 @@ async def get_llm_response_for_test(prompt: str) -> str:
     
     # Специальные параметры для генерации тестов
     fallback_models = [
-        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - более стабильная
-        'mistralai/mistral-7b-instruct:free',         # Mistral 7B
-        'meta-llama/llama-3.1-8b-instruct:free',     # Llama 3.1 8B
-        'huggingfaceh4/zephyr-7b-beta:free',          # Zephyr 7B
+        'meta-llama/llama-3.3-70b-instruct:free',    # Llama 3.3 70B - основная модель
+        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 1
+        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 2
+        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 3
+        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 4
     ]
     
     # Увеличенные параметры для генерации тестов
