@@ -293,6 +293,32 @@ async def handle_help(message: Message):
     await message.answer(help_text, parse_mode="Markdown")
 
 
+async def handle_unknown_command(message: Message):
+    """
+    Обработка неизвестных команд
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    command = message.text.split()[0] if message.text else ""
+    
+    logger.info(f"Неизвестная команда '{command}' от пользователя {user_id}")
+    
+    unknown_text = f"""❌ Команда `{command}` не найдена.
+
+Используйте доступные команды:
+• `/start` - Начать работу с ботом
+• `/learn` - Выбрать курс для изучения
+• `/level` - Изменить уровень знаний
+• `/status` - Показать текущий статус
+• `/help` - Показать справку
+
+Или просто задавайте вопросы по машинному обучению!"""
+    
+    await message.answer(unknown_text, parse_mode="Markdown")
+
+
 async def handle_course_selection(callback_query: CallbackQuery):
     """
     Обработка выбора курса - показывает план курса с прогрессом
@@ -1299,6 +1325,9 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик команды /learn - выбор курсов
     dp.message.register(handle_learn, Command("learn"))
+    
+    # Обработчик неизвестных команд (команды, начинающиеся с /, но не зарегистрированные)
+    dp.message.register(handle_unknown_command, F.text.startswith("/"))
     
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection, F.data.startswith("level_"))
