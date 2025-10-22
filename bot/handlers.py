@@ -344,8 +344,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
         
         # Формируем план курса с прогрессом
         plan_text = f"🧠 **МАТЕМАТИЧЕСКИЕ ОСНОВЫ ML**\n\n"
-        plan_text += f"📊 Прогресс: {progress.completed_lessons}/{course.total_lessons} уроков завершено\n"
-        plan_text += f"📍 Текущий урок: {progress.current_lesson}/{course.total_lessons}\n\n"
+        plan_text += f"📊 Прогресс: {len(completed_lessons)}/{course.total_lessons} уроков завершено\n\n"
         
         # Показываем уроки с галочками по разделам
         plan_text += "📋 План курса:\n"
