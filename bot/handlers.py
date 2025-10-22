@@ -127,7 +127,7 @@ async def handle_learn(message: Message):
     
     courses_text = "📚 Доступные курсы:\n\n"
     for i, course in enumerate(courses, 1):
-        courses_text += f"{i}️⃣ {course.name}\n"
+        courses_text += f"🧠 {course.name}\n"
         courses_text += f"   └─ {course.description}\n"
         courses_text += f"   └─ Уроков: {course.total_lessons}\n\n"
     
@@ -273,13 +273,12 @@ async def handle_course_selection(callback_query: CallbackQuery):
             progress = db.get_user_progress(user_id, course_id)
         
         # Формируем план курса с прогрессом
-        plan_text = f"📚 **{course.name}**\n\n"
-        plan_text += f"{course.description}\n\n"
+        plan_text = f"🧠 **МАТЕМАТИЧЕСКИЕ ОСНОВЫ ML**\n\n"
         plan_text += f"📊 Прогресс: {progress.completed_lessons}/{course.total_lessons} уроков завершено\n"
         plan_text += f"📍 Текущий урок: {progress.current_lesson}/{course.total_lessons}\n\n"
         
         # Показываем уроки с галочками по разделам
-        plan_text += "📋 План курса:\n\n"
+        plan_text += "📋 План курса:\n"
         
         # ЛИНЕЙНАЯ АЛГЕБРА
         plan_text += "▲ ЛИНЕЙНАЯ АЛГЕБРА\n"
@@ -295,10 +294,10 @@ async def handle_course_selection(callback_query: CallbackQuery):
             lesson = db.get_lesson(course_id, i)
             if lesson:
                 is_completed = progress.completed_lessons >= i
-                status = "✅" if is_completed else "⭕"
+                status = "✅" if is_completed else ""
                 plan_text += f"{status} {i}. {lesson_title}\n"
             else:
-                plan_text += f"⭕ {i}. {lesson_title}\n"
+                plan_text += f"{i}. {lesson_title}\n"
         
         plan_text += "\n▲ МАТАН И ОПТИМИЗАЦИЯ\n"
         math_optimization_lessons = [
@@ -316,10 +315,10 @@ async def handle_course_selection(callback_query: CallbackQuery):
             lesson = db.get_lesson(course_id, i)
             if lesson:
                 is_completed = progress.completed_lessons >= i
-                status = "✅" if is_completed else "⭕"
+                status = "✅" if is_completed else ""
                 plan_text += f"{status} {i}. {lesson_title}\n"
             else:
-                plan_text += f"⭕ {i}. {lesson_title}\n"
+                plan_text += f"{i}. {lesson_title}\n"
         
         plan_text += "\n▲ ВЕРОЯТНОСТЬ И СТАТИСТИКА\n"
         probability_stats_lessons = [
@@ -334,10 +333,10 @@ async def handle_course_selection(callback_query: CallbackQuery):
             lesson = db.get_lesson(course_id, i)
             if lesson:
                 is_completed = progress.completed_lessons >= i
-                status = "✅" if is_completed else "⭕"
+                status = "✅" if is_completed else ""
                 plan_text += f"{status} {i}. {lesson_title}\n"
             else:
-                plan_text += f"⭕ {i}. {lesson_title}\n"
+                plan_text += f"{i}. {lesson_title}\n"
         
         # Создаем клавиатуру
         keyboard_buttons = []
@@ -901,10 +900,10 @@ async def handle_test_answer(callback_query: CallbackQuery):
                 "Отлично! Вы успешно прошли тест. Можете перейти к следующему уроку.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="➡️ Перейти к следующему уроку", callback_data=f"lesson_{course_id}_{lesson.lesson_number+1}")
+                        InlineKeyboardButton(text="➡️ Следующий урок", callback_data=f"lesson_{course_id}_{lesson.lesson_number+1}")
                     ],
                     [
-                        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
+                        InlineKeyboardButton(text="📚 Меню курса", callback_data=f"back_to_course_{course_id}")
                     ]
                 ])
             )
