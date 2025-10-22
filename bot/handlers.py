@@ -979,6 +979,82 @@ async def handle_errors_command(message: Message):
     await message.answer(errors_text)
 
 
+async def handle_photo(message: Message):
+    """
+    Обработка фотографий с использованием Vision API
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    
+    logger.info(f"Фото от пользователя {user_id}")
+    
+    # Отправляем индикатор обработки
+    processing_msg = await message.answer("📷 Анализирую изображение...")
+    
+    try:
+        # Получаем информацию о фото
+        photo = message.photo[-1]  # Берем фото наибольшего размера
+        file_id = photo.file_id
+        
+        # Получаем файл от Telegram
+        bot = message.bot
+        file = await bot.get_file(file_id)
+        
+        # Скачиваем файл
+        file_content = await bot.download_file(file.file_path)
+        
+        # Конвертируем в base64
+        import base64
+        image_base64 = base64.b64encode(file_content.read()).decode('utf-8')
+        
+        # Определяем формат изображения
+        image_format = "jpeg"  # По умолчанию
+        if file.file_path:
+            if file.file_path.lower().endswith('.png'):
+                image_format = "png"
+            elif file.file_path.lower().endswith('.gif'):
+                image_format = "gif"
+        
+        # Получаем историю диалога
+        dialog_history = get_dialog_history(chat_id)
+        
+        # Добавляем сообщение пользователя в историю
+        caption = message.caption or "Проанализируй это изображение"
+        add_user_message(chat_id, f"[ИЗОБРАЖЕНИЕ] {caption}")
+        
+        # Получаем обновленную историю диалога
+        dialog_history = get_dialog_history(chat_id)
+        
+        # Импортируем Vision API клиент
+        from llm.vision_client import get_vision_response
+        
+        # Получаем ответ от Vision API
+        response = await get_vision_response(dialog_history, image_base64, image_format)
+        
+        if response:
+            # Добавляем ответ в историю
+            add_assistant_message(chat_id, response)
+            
+            # Отправляем ответ пользователю
+            await processing_msg.edit_text(response)
+            
+            # Обновляем статистику прогресса
+            progress_tracker.update_progress(user_id, caption, response)
+        else:
+            await processing_msg.edit_text(
+                "❌ Не удалось проанализировать изображение. Попробуйте отправить другое фото или обратитесь к администратору."
+            )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке фото: {type(e).__name__}: {e}")
+        await processing_msg.edit_text(
+            "❌ Произошла ошибка при обработке изображения. Попробуйте отправить другое фото."
+        )
+
+
 async def handle_voice(message: Message):
     """
     Обработка голосовых сообщений
@@ -991,8 +1067,63 @@ async def handle_voice(message: Message):
     
     logger.info(f"Голосовое сообщение от пользователя {user_id}")
     
-    # Пока что просто отвечаем, что функция в разработке
-    await message.answer("🎤 Голосовые сообщения пока в разработке. Используйте текстовые сообщения.")
+    # Отправляем индикатор обработки
+    processing_msg = await message.answer("🎤 Обрабатываю голосовое сообщение...")
+    
+    try:
+        # Получаем информацию о голосовом файле
+        voice = message.voice
+        file_id = voice.file_id
+        
+        # Получаем файл от Telegram
+        bot = message.bot
+        file = await bot.get_file(file_id)
+        
+        # Скачиваем файл
+        file_content = await bot.download_file(file.file_path)
+        
+        # Импортируем Speech API клиент
+        from llm.speech_client import HuggingFaceSpeechClient
+        
+        # Создаем клиент для распознавания речи
+        speech_client = HuggingFaceSpeechClient()
+        
+        # Конвертируем аудио в текст
+        text = await speech_client.transcribe_audio(file_content.read())
+        
+        if text and text.strip():
+            # Добавляем сообщение пользователя в историю
+            add_user_message(chat_id, f"[ГОЛОСОВОЕ СООБЩЕНИЕ] {text}")
+            
+            # Получаем историю диалога
+            dialog_history = get_dialog_history(chat_id)
+            
+            # Получаем ответ от LLM
+            response = await get_llm_response(dialog_history)
+            
+            if response:
+                # Добавляем ответ в историю
+                add_assistant_message(chat_id, response)
+                
+                # Отправляем ответ пользователю
+                await processing_msg.edit_text(f"🎤 **Распознанный текст:** {text}\n\n**Ответ:**\n{response}")
+                
+                # Обновляем статистику прогресса
+                progress_tracker.update_progress(user_id, text, response)
+            else:
+                await processing_msg.edit_text(
+                    f"🎤 **Распознанный текст:** {text}\n\n❌ Не удалось получить ответ. Попробуйте еще раз."
+                )
+        else:
+            await processing_msg.edit_text(
+                "❌ Не удалось распознать речь. Попробуйте записать сообщение еще раз или используйте текстовые сообщения."
+            )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке голосового сообщения: {type(e).__name__}: {e}")
+        await processing_msg.edit_text(
+            "❌ Произошла ошибка при обработке голосового сообщения. Попробуйте записать еще раз или используйте текстовые сообщения."
+        )
 
 
 def _is_mathematical_question(question: str) -> bool:
@@ -1175,6 +1306,9 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик голосовых сообщений (должен быть перед общим обработчиком сообщений)
     dp.message.register(handle_voice, F.voice)
+    
+    # Обработчик фото сообщений (должен быть перед общим обработчиком сообщений)
+    dp.message.register(handle_photo, F.photo)
     
     # Обработчик всех остальных текстовых сообщений через LLM с контекстом
     dp.message.register(handle_message)
