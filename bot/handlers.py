@@ -1167,7 +1167,7 @@ async def handle_voice(message: Message):
         
         if text and text.strip():
             # Добавляем сообщение пользователя в историю
-            add_user_message(chat_id, f"[ГОЛОСОВОЕ СООБЩЕНИЕ] {text}")
+            add_user_message(chat_id, text)
             
             # Получаем историю диалога
             dialog_history = get_dialog_history(chat_id)
@@ -1180,7 +1180,7 @@ async def handle_voice(message: Message):
                 add_assistant_message(chat_id, response)
                 
                 # Отправляем ответ пользователю
-                await processing_msg.edit_text(f"🎤 **Распознанный текст:** {text}\n\n**Ответ:**\n{response}")
+                await processing_msg.edit_text(response)
                 
                 # Обновляем статистику прогресса
                 progress_tracker.update_progress(user_id, text, response)
