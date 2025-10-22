@@ -64,7 +64,7 @@ async def handle_start(message: Message):
     """
     Обработка команды /start
     
-    Показывает выбор режима работы (вопросы или обучение)
+    Показывает приветствие и основные команды
     
     Args:
         message: Объект сообщения от пользователя
@@ -80,11 +80,18 @@ async def handle_start(message: Message):
     # Очистка истории при старте (начинаем с чистого листа)
     clear_dialog(chat_id)
     
-    # Создаем кнопки для выбора режима
+    # Создаем кнопки для основных функций
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="❓ Режим вопросов", callback_data="mode_questions"),
-            InlineKeyboardButton(text="📚 Курсы", callback_data="mode_courses")
+            InlineKeyboardButton(text="📊 Сменить уровень", callback_data="change_level"),
+            InlineKeyboardButton(text="ℹ️ Статус", callback_data="show_status")
+        ],
+        [
+            InlineKeyboardButton(text="👤 Профиль", callback_data="show_profile"),
+            InlineKeyboardButton(text="📚 Начать курс Math", callback_data="start_course")
+        ],
+        [
+            InlineKeyboardButton(text="❓ Помощь", callback_data="show_help")
         ]
     ])
     
@@ -92,47 +99,6 @@ async def handle_start(message: Message):
     await message.answer(welcome_text, reply_markup=keyboard)
 
 
-async def handle_mode_selection(callback_query: CallbackQuery):
-    """
-    Обработка выбора режима работы
-    
-    Args:
-        callback_query: Объект callback query от пользователя
-    """
-    user_id = callback_query.from_user.id
-    data = callback_query.data
-    
-    if data == "mode_questions":
-        # Режим вопросов
-        keyboard = create_questions_mode_keyboard()
-        await callback_query.message.edit_text(
-            "❓ Режим вопросов активирован!\n\n"
-            "Задавайте любые вопросы по машинному обучению, математике и программированию. "
-            "Я буду отвечать в соответствии с вашим уровнем знаний.",
-            reply_markup=keyboard
-        )
-        await callback_query.answer()
-    
-    elif data == "mode_courses":
-        # Режим курсов
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📚 Начать курс Math", callback_data="start_course"),
-                InlineKeyboardButton(text="👤 Мой профиль", callback_data="show_profile")
-            ],
-            [
-                InlineKeyboardButton(text="❌ Мои ошибки", callback_data="show_errors"),
-                InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
-            ]
-        ])
-        
-        await callback_query.message.edit_text(
-            "📚 Режим курсов!\n\n"
-            "Здесь вы можете изучать структурированные курсы по машинному обучению. "
-            "Каждый курс состоит из уроков с тестами для проверки знаний.",
-            reply_markup=keyboard
-        )
-        await callback_query.answer()
 
 
 async def handle_level(message: Message):
@@ -251,16 +217,8 @@ async def handle_main_menu_buttons(callback_query: CallbackQuery):
         await handle_start_course(callback_query.message)
         await callback_query.answer()
     
-    elif data == "show_errors":
-        await handle_errors_command(callback_query.message)
-        await callback_query.answer()
-    
     elif data == "show_help":
         await handle_help(callback_query.message)
-        await callback_query.answer()
-    
-    elif data == "back_to_main":
-        await handle_start(callback_query.message)
         await callback_query.answer()
 
 
@@ -763,16 +721,12 @@ def register_handlers(dp: Dispatcher):
     # Обработчик команды /errors - ошибки в тестах
     dp.message.register(handle_errors_command, Command("errors"))
     
-    # Обработчик выбора режима работы (вопросы или обучение)
-    dp.callback_query.register(handle_mode_selection, F.data.in_(["mode_questions", "mode_courses"]))
-    
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection, F.data.startswith("level_"))
     
     # Обработчик кнопок главного меню
     dp.callback_query.register(handle_main_menu_buttons, F.data.in_([
-        "change_level", "show_status", "show_profile", "start_course", 
-        "show_help", "back_to_main", "show_errors"
+        "change_level", "show_status", "show_profile", "start_course", "show_help"
     ]))
     
     # Обработчики для курсов

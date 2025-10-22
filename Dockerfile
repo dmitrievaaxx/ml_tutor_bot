@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml ./
 COPY bot/ ./bot/
 COPY llm/ ./llm/
+COPY data/ ./data/
 
 # Устанавливаем uv и зависимости проекта с оптимизацией
 RUN pip install --no-cache-dir uv && \
