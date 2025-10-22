@@ -953,7 +953,8 @@ async def handle_test_answer(callback_query: CallbackQuery):
                 progress = db.get_user_progress(user_id, course_id)
                 if progress:
                     completed_lessons = progress.completed_lessons + 1
-                    db.update_user_progress(user_id, course_id, lesson.lesson_number, completed_lessons)
+                    next_lesson = lesson.lesson_number + 1
+                    db.update_user_progress(user_id, course_id, next_lesson, completed_lessons)
             
             await callback_query.message.edit_text(
                 "✅ Правильно! Урок завершен.\n\n"
