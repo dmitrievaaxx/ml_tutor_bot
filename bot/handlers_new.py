@@ -78,6 +78,9 @@ async def handle_learn(message: Message):
             InlineKeyboardButton(text=f"📚 {course.name}", callback_data=f"course_{course.id}")
         ])
     
+    keyboard_buttons.append([
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
+    ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     
@@ -112,6 +115,9 @@ async def handle_level(message: Message):
         ],
         [
             InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")
+        ],
+        [
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
         ]
     ])
     
@@ -256,18 +262,12 @@ async def handle_course_selection(callback_query: CallbackQuery):
         ])
         
         keyboard_buttons.append([
-            InlineKeyboardButton(text="← Назад к выбору курсов", callback_data="back_to_courses")
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
         ])
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
         
         await callback_query.message.edit_text(plan_text, reply_markup=keyboard, parse_mode="Markdown")
-        await callback_query.answer()
-    
-    elif data == "back_to_courses":
-        # Возврат к выбору курсов
-        await callback_query.message.delete()
-        await handle_learn(callback_query.message)
         await callback_query.answer()
     
     elif data == "back_to_main":
@@ -291,6 +291,11 @@ async def handle_main_menu_buttons(callback_query: CallbackQuery):
     
     elif data == "show_errors":
         await handle_errors_command(callback_query.message)
+        await callback_query.answer()
+    
+    elif data == "back_to_main":
+        await callback_query.message.delete()
+        await handle_start(callback_query.message)
         await callback_query.answer()
 
 
@@ -731,11 +736,10 @@ def register_handlers(dp: Dispatcher):
     # Обработчик выбора курсов
     dp.callback_query.register(handle_course_selection, F.data.startswith("course_"))
     dp.callback_query.register(handle_course_selection, F.data == "back_to_main")
-    dp.callback_query.register(handle_course_selection, F.data == "back_to_courses")
     
     # Обработчик кнопок главного меню
     dp.callback_query.register(handle_main_menu_buttons, F.data.in_([
-        "show_profile", "show_errors"
+        "show_profile", "show_errors", "back_to_main"
     ]))
     
     # Обработчики для курсов

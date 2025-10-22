@@ -33,8 +33,7 @@ async def setup_bot_commands(bot: Bot):
     """
     commands = [
         BotCommand(command="start", description="🚀 Начать обучение ML"),
-        BotCommand(command="start_course", description="📚 Начать курс Math"),
-        BotCommand(command="learn", description="📚 Список учебных курсов"),
+        BotCommand(command="learn", description="📚 Выбрать курс"),
         BotCommand(command="profile", description="👤 Мой профиль"),
         BotCommand(command="errors", description="❌ Мои ошибки"),
         BotCommand(command="level", description="📊 Сменить уровень знаний"),

@@ -1,28 +1,63 @@
-"""
-Обработчики сообщений и команд для Telegram бота ML Tutor
-
-Этот модуль содержит все обработчики для команд, сообщений и callback queries.
-"""
+"""Обработчики команд и сообщений Telegram-бота"""
 
 import logging
+import random
+import base64
+from datetime import datetime
 from aiogram import Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
-from bot.dialog import clear_dialog, add_message, get_dialog_history, extract_user_level
-from bot.prompts import get_system_prompt, get_welcome_message
-from bot.progress import LearningProgressTracker
 from llm.client import get_llm_response
+from llm.speech_client import transcribe_audio_data
+from bot.dialog import (
+    get_dialog_history,
+    add_user_message,
+    add_assistant_message,
+    clear_dialog,
+    get_dialog_stats,
+    clean_response,
+    is_first_level_selection,
+    get_welcome_message
+)
 from bot.database import Database
 from bot.test_prompts import TEST_GENERATION_PROMPT
 
+
 logger = logging.getLogger(__name__)
 
-# Инициализация трекера прогресса
-progress_tracker = LearningProgressTracker()
+# Сообщения для индикатора "модель думает"
+THINKING_MESSAGES = [
+    "⏳ Секунду...",
+    "💭 Минутку...",
+    "🔍 Ищу лучший ответ для тебя...",
+    "💭 Думаю над ответом...",
+    "💡 Формулирую понятное объяснение...",
+    "🎓 Готовлю подробный ответ...",
+    "📚 Подбираю лучшие примеры...",
+]
 
-# Инициализация базы данных
-db = Database()
+
+def create_questions_mode_keyboard():
+    """
+    Создает клавиатуру для режима задавания вопросов
+    
+    Returns:
+        InlineKeyboardMarkup: Клавиатура с кнопками управления
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📊 Сменить уровень", callback_data="change_level"),
+            InlineKeyboardButton(text="ℹ️ Статус", callback_data="show_status")
+        ],
+        [
+            InlineKeyboardButton(text="👤 Профиль", callback_data="show_profile"),
+            InlineKeyboardButton(text="📚 Начать курс", callback_data="start_course")
+        ],
+        [
+            InlineKeyboardButton(text="❓ Помощь", callback_data="show_help")
+        ]
+    ])
 
 
 async def handle_start(message: Message):
@@ -49,6 +84,8 @@ async def handle_start(message: Message):
     await message.answer(welcome_text)
 
 
+
+
 async def handle_learn(message: Message):
     """
     Обработка команды /learn - выбор курсов
@@ -69,8 +106,8 @@ async def handle_learn(message: Message):
     
     if not courses:
         await message.answer("❌ Курсы пока не доступны. Обратитесь к администратору.")
-        return
-    
+            return
+        
     # Создаем клавиатуру с курсами
     keyboard_buttons = []
     for course in courses:
@@ -78,6 +115,9 @@ async def handle_learn(message: Message):
             InlineKeyboardButton(text=f"📚 {course.name}", callback_data=f"course_{course.id}")
         ])
     
+    keyboard_buttons.append([
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
+    ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     
@@ -105,17 +145,20 @@ async def handle_level(message: Message):
     logger.info(f"Команда /level от пользователя {user_id}")
     
     # Создаем клавиатуру для выбора уровня
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
             InlineKeyboardButton(text="🟢 Базовый", callback_data="level_beginner"),
             InlineKeyboardButton(text="🟡 Средний", callback_data="level_intermediate")
         ],
         [
             InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")
+        ],
+        [
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
         ]
     ])
     
-    await message.answer(
+        await message.answer(
         "📊 Выберите ваш уровень знаний:\n\n"
         "🟢 **Базовый** - начинающий, изучаю основы\n"
         "🟡 **Средний** - имею опыт, хочу углубить знания\n"
@@ -133,71 +176,49 @@ async def handle_status(message: Message):
         message: Объект сообщения от пользователя
     """
     user_id = message.from_user.id
-    chat_id = message.chat.id
     
     logger.info(f"Команда /status от пользователя {user_id}")
     
     # Получаем статистику диалога
-    dialog_history = get_dialog_history(chat_id)
-    current_level = extract_user_level(chat_id)
+    stats = get_dialog_stats(message.chat.id)
     
-    # Получаем статистику прогресса
-    progress_stats = progress_tracker.get_user_stats(user_id)
-    
-    status_text = f"📊 **Ваш текущий статус:**\n\n"
-    status_text += f"🎯 **Уровень знаний:** {current_level}\n"
-    status_text += f"💬 **Сообщений в диалоге:** {len(dialog_history)}\n"
-    status_text += f"📈 **Изученных тем:** {progress_stats.get('topics_studied', 0)}\n"
-    status_text += f"⏱️ **Время обучения:** {progress_stats.get('learning_time', '0 мин')}\n\n"
-    status_text += "Используйте /level для смены уровня знаний."
+    status_text = (
+        f"ℹ️ **Ваш статус:**\n\n"
+        f"📊 Уровень: Базовый (по умолчанию)\n"
+        f"💬 Сообщений в диалоге: {stats['message_count']}\n"
+        f"📝 Последнее сообщение: {stats['last_message_time']}\n\n"
+        f"Используйте /level для смены уровня знаний"
+    )
     
     await message.answer(status_text, parse_mode="Markdown")
 
 
 async def handle_help(message: Message):
     """
-    Обработка команды /help - показ справки
+    Обработка команды /help - помощь
     
     Args:
         message: Объект сообщения от пользователя
     """
-    user_id = message.from_user.id
-    
-    logger.info(f"Команда /help от пользователя {user_id}")
-    
-    help_text = """
-🤖 **ML Tutor Bot - Справка**
-
-**Основные команды:**
-• `/start` - Начать работу с ботом
-• `/learn` - Выбрать курс для изучения
-• `/level` - Изменить уровень знаний
-• `/status` - Показать текущий статус
-• `/profile` - Мой профиль
-• `/errors` - Мои ошибки в тестах
-• `/help` - Показать эту справку
-
-**Как пользоваться:**
-1. Выберите уровень знаний командой `/level`
-2. Задавайте вопросы по машинному обучению
-3. Изучайте курсы командой `/learn`
-4. Отслеживайте прогресс в профиле
-
-**Возможности:**
-• Адаптивные ответы под ваш уровень
-• Структурированные курсы с тестами
-• Отслеживание прогресса обучения
-• Голосовые сообщения (в разработке)
-
-**Поддерживаемые темы:**
-• Машинное обучение
-• Математика для ML
-• Программирование на Python
-• Нейронные сети
-• Обработка данных
-
-Задавайте любые вопросы! 🚀
-"""
+    help_text = (
+        "❓ **Помощь по использованию бота:**\n\n"
+        "**Основные команды:**\n"
+        "• /start - начать работу с ботом\n"
+        "• /level - изменить уровень знаний\n"
+        "• /status - показать текущий статус\n"
+        "• /profile - показать профиль\n"
+        "• /start_course - начать курс Math\n"
+        "• /errors - показать ошибки в тестах\n"
+        "• /help - эта справка\n\n"
+        "**Режимы работы:**\n"
+        "• **Вопросы** - задавайте любые вопросы по ML\n"
+        "• **Курсы** - изучайте структурированные уроки\n\n"
+        "**Возможности:**\n"
+        "• Анализ изображений с формулами и схемами\n"
+        "• Транскрипция голосовых сообщений\n"
+        "• Адаптация ответов под ваш уровень\n"
+        "• Интерактивные тесты и прогресс"
+    )
     
     await message.answer(help_text, parse_mode="Markdown")
 
@@ -218,8 +239,8 @@ async def handle_course_selection(callback_query: CallbackQuery):
         
         if not course:
             await callback_query.answer("❌ Курс не найден.")
-            return
-        
+                return
+            
         # Получаем прогресс пользователя
         progress = db.get_user_progress(user_id, course_id)
         if not progress:
@@ -256,18 +277,12 @@ async def handle_course_selection(callback_query: CallbackQuery):
         ])
         
         keyboard_buttons.append([
-            InlineKeyboardButton(text="← Назад к выбору курсов", callback_data="back_to_courses")
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
         ])
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
         
         await callback_query.message.edit_text(plan_text, reply_markup=keyboard, parse_mode="Markdown")
-        await callback_query.answer()
-    
-    elif data == "back_to_courses":
-        # Возврат к выбору курсов
-        await callback_query.message.delete()
-        await handle_learn(callback_query.message)
         await callback_query.answer()
     
     elif data == "back_to_main":
@@ -292,7 +307,12 @@ async def handle_main_menu_buttons(callback_query: CallbackQuery):
     elif data == "show_errors":
         await handle_errors_command(callback_query.message)
         await callback_query.answer()
-
+    
+    elif data == "back_to_main":
+        await callback_query.message.delete()
+        await handle_start(callback_query.message)
+        await callback_query.answer()
+        
 
 async def handle_level_selection(callback_query: CallbackQuery):
     """
@@ -304,7 +324,6 @@ async def handle_level_selection(callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     data = callback_query.data
     
-    # Маппинг callback_data на уровни
     level_map = {
         "level_beginner": "Базовый",
         "level_intermediate": "Средний", 
@@ -316,18 +335,18 @@ async def handle_level_selection(callback_query: CallbackQuery):
         
         # Обновляем уровень пользователя (в реальной реализации здесь была бы БД)
         logger.info(f"Пользователь {user_id} изменил уровень на: {level}")
-        
-        await callback_query.message.edit_text(
+            
+            await callback_query.message.edit_text(
             f"✅ Уровень знаний изменен на: **{level}**\n\n"
             "Теперь я буду адаптировать ответы под ваш уровень знаний.",
-            parse_mode="Markdown"
-        )
+                parse_mode="Markdown"
+            )
         await callback_query.answer()
         
 
 async def handle_message(message: Message):
     """
-    Обработка обычных текстовых сообщений через LLM
+    Обработка текстовых сообщений через LLM с контекстом
     
     Args:
         message: Объект сообщения от пользователя
@@ -338,34 +357,109 @@ async def handle_message(message: Message):
     
     logger.info(f"Сообщение от пользователя {user_id}: {text[:50]}...")
     
+    # Проверяем, не является ли это выбором уровня
+    if is_first_level_selection(text):
+            return
+        
     # Добавляем сообщение пользователя в историю
-    add_message(chat_id, "user", text)
+    add_user_message(chat_id, text)
     
     # Получаем историю диалога
     dialog_history = get_dialog_history(chat_id)
     
-    # Определяем уровень пользователя
-    user_level = extract_user_level(chat_id)
+    # Отправляем индикатор "модель думает"
+    thinking_msg = random.choice(THINKING_MESSAGES)
+    processing_msg = await message.answer(thinking_msg)
     
-    # Формируем системный промпт с учетом уровня
-    system_prompt = get_system_prompt(user_level)
-    
-    # Отправляем запрос к LLM
     try:
-        response = await get_llm_response(text, user_id, dialog_history, system_prompt)
+        # Получаем ответ от LLM
+        response = await get_llm_response(text, user_id, dialog_history)
         
-        # Добавляем ответ в историю
-        add_message(chat_id, "assistant", response)
+        # Очищаем ответ от лишних символов
+        clean_text = clean_response(response)
+        
+        # Добавляем ответ ассистента в историю
+        add_assistant_message(chat_id, clean_text)
+        
+        # Удаляем сообщение "обрабатываю"
+        await processing_msg.delete()
         
         # Отправляем ответ пользователю
-        await message.answer(response)
+        await message.answer(clean_text)
         
-        # Обновляем статистику прогресса
-        progress_tracker.update_progress(user_id, text, response)
+        logger.info(f"Ответ отправлен пользователю {user_id}. Длина ответа: {len(clean_text)} символов")
         
     except Exception as e:
-        logger.error(f"Ошибка при обработке сообщения: {e}")
-        await message.answer("Извините, произошла ошибка при обработке вашего сообщения. Попробуйте еще раз.")
+        logger.error(f"Ошибка при обработке сообщения: {type(e).__name__}: {e}")
+        await processing_msg.edit_text("😔 Извините, произошла ошибка при обработке сообщения. Попробуйте еще раз.")
+
+
+async def handle_photo(message: Message):
+    """
+    Обработка фотографий с использованием Vision API
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    
+    logger.info(f"Фото от пользователя {user_id}")
+    
+    # Отправляем индикатор обработки
+    processing_msg = await message.answer("📷 Анализирую изображение...")
+    
+    try:
+        # Получаем информацию о фото
+        photo = message.photo[-1]  # Берем фото наибольшего размера
+        file_id = photo.file_id
+        
+        # Здесь должна быть логика анализа изображения через Vision API
+        # Пока что отправляем заглушку
+        await processing_msg.edit_text(
+            "📷 Изображение получено!\n\n"
+            "Функция анализа изображений временно недоступна. "
+            "Отправьте текстовое сообщение для получения ответа."
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке фото: {type(e).__name__}: {e}")
+        await processing_msg.edit_text("😔 Извините, произошла ошибка при обработке изображения. Попробуйте отправить текстовое сообщение.")
+
+
+async def handle_voice(message: Message):
+    """
+    Обработка голосовых сообщений
+    
+    Args:
+        message: Объект сообщения от пользователя
+    """
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    
+    logger.info(f"Голосовое сообщение от пользователя {user_id}")
+    
+    # Отправляем индикатор обработки
+    processing_msg = await message.answer("🎤 Обрабатываю голосовое сообщение...")
+    
+    try:
+        # Здесь должна быть логика транскрипции голоса
+        # Пока что отправляем заглушку
+        await processing_msg.edit_text(
+            "🎤 Голосовое сообщение получено!\n\n"
+            "Функция транскрипции голоса временно недоступна. "
+            "Отправьте текстовое сообщение для получения ответа."
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке голосового сообщения: {type(e).__name__}: {e}")
+        await processing_msg.edit_text("😔 Извините, произошла ошибка при обработке голосового сообщения. Попробуйте отправить текстовое сообщение.")
+
+
+# Инициализация базы данных
+db = Database()
+
+
 
 
 async def show_lesson(message: Message, course_id: int, lesson_number: int):
@@ -378,7 +472,7 @@ async def show_lesson(message: Message, course_id: int, lesson_number: int):
     lesson = db.get_lesson(course_id, lesson_number)
     if not lesson:
         await message.answer("❌ Урок не найден.")
-        return
+            return
         
     course = db.get_course(course_id)
     progress = db.get_user_progress(user_id, course_id)
@@ -502,10 +596,10 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         
         if not question or len(options) != 3 or not correct_answer:
             await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
-            return
+                return
             
         # Создаем клавиатуру с вариантами ответов
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text=f"A) {options[0]}", callback_data=f"answer_{lesson_id}_A_{correct_answer}"),
                 InlineKeyboardButton(text=f"B) {options[1]}", callback_data=f"answer_{lesson_id}_B_{correct_answer}")
@@ -593,7 +687,7 @@ async def handle_test_answer(callback_query: CallbackQuery):
             )
         
         await callback_query.answer()
-
+        
 
 async def handle_profile_command(message: Message):
     """
@@ -617,9 +711,9 @@ async def handle_profile_command(message: Message):
                 })
     
     if not courses_stats:
-        await message.answer("📊 Вы еще не начали изучать курсы. Используйте /learn для начала.")
-        return
-    
+        await message.answer("📊 Вы еще не начали изучать курсы. Используйте /start_course для начала.")
+            return
+        
     # Формируем сообщение профиля
     profile_text = "👤 Ваш профиль:\n\n"
     
@@ -643,8 +737,8 @@ async def handle_errors_command(message: Message):
     
     if not errors:
         await message.answer("✅ У вас нет ошибок в тестах!")
-        return
-    
+            return
+        
     # Группируем ошибки по урокам
     errors_by_lesson = {}
     for error in errors:
@@ -676,22 +770,6 @@ async def handle_errors_command(message: Message):
     errors_text += "Попробуйте пройти тесты заново для улучшения результатов!"
     
     await message.answer(errors_text)
-
-
-async def handle_voice(message: Message):
-    """
-    Обработка голосовых сообщений
-    
-    Args:
-        message: Объект сообщения с голосовым файлом
-    """
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    
-    logger.info(f"Голосовое сообщение от пользователя {user_id}")
-    
-    # Пока что просто отвечаем, что функция в разработке
-    await message.answer("🎤 Голосовые сообщения пока в разработке. Используйте текстовые сообщения.")
 
 
 def register_handlers(dp: Dispatcher):
@@ -731,11 +809,10 @@ def register_handlers(dp: Dispatcher):
     # Обработчик выбора курсов
     dp.callback_query.register(handle_course_selection, F.data.startswith("course_"))
     dp.callback_query.register(handle_course_selection, F.data == "back_to_main")
-    dp.callback_query.register(handle_course_selection, F.data == "back_to_courses")
     
     # Обработчик кнопок главного меню
     dp.callback_query.register(handle_main_menu_buttons, F.data.in_([
-        "show_profile", "show_errors"
+        "show_profile", "show_errors", "back_to_main"
     ]))
     
     # Обработчики для курсов
@@ -747,6 +824,11 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик голосовых сообщений (должен быть перед общим обработчиком сообщений)
     dp.message.register(handle_voice, F.voice)
+    
+    # Обработчик фотографий и документов с изображениями (должен быть перед общим обработчиком сообщений)
+    # Регистрируем отдельно для каждого типа медиа
+    dp.message.register(handle_photo, F.photo)
+    dp.message.register(handle_photo, F.document.has(F.mime_type.startswith('image/')))
     
     # Обработчик всех остальных текстовых сообщений через LLM с контекстом
     dp.message.register(handle_message)
