@@ -504,8 +504,15 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         
         logger.info(f"Ответ LLM для генерации теста: {response[:300]}...")
         
+        # Очищаем ответ от токенов модели
+        clean_response = response.strip()
+        if clean_response.startswith('<s>'):
+            clean_response = clean_response[3:].strip()
+        if clean_response.startswith('</s>'):
+            clean_response = clean_response[:-4].strip()
+        
         # Парсим ответ
-        lines = response.strip().split('\n')
+        lines = clean_response.split('\n')
         question = ""
         options = []
         correct_answer = ""
@@ -525,20 +532,33 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         
         # Если не удалось распарсить, попробуем альтернативный формат
         if not question or len(options) != 3 or not correct_answer:
-            logger.warning(f"Не удалось распарсить ответ LLM: {response[:200]}...")
+            logger.warning(f"Не удалось распарсить ответ LLM: {clean_response[:200]}...")
             # Попробуем найти вопрос и варианты по другим паттернам
             for line in lines:
                 line = line.strip()
                 if not question and ("?" in line or "равен" in line or "равна" in line):
                     question = line
                 elif line.startswith("A)") or line.startswith("A."):
-                    options.append(line[2:].strip())
+                    if len(options) < 3:  # Предотвращаем дублирование
+                        options.append(line[2:].strip())
                 elif line.startswith("B)") or line.startswith("B."):
-                    options.append(line[2:].strip())
+                    if len(options) < 3:
+                        options.append(line[2:].strip())
                 elif line.startswith("C)") or line.startswith("C."):
-                    options.append(line[2:].strip())
+                    if len(options) < 3:
+                        options.append(line[2:].strip())
                 elif "правильный" in line.lower() and ("A" in line or "B" in line or "C" in line):
                     correct_answer = line.split()[-1].strip()
+        
+        # Нормализуем правильный ответ
+        if correct_answer in ['A', 'B', 'C']:
+            correct_answer = correct_answer
+        elif correct_answer.startswith('A)'):
+            correct_answer = 'A'
+        elif correct_answer.startswith('B)'):
+            correct_answer = 'B'
+        elif correct_answer.startswith('C)'):
+            correct_answer = 'C'
         
         if not question or len(options) != 3 or not correct_answer:
             await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
