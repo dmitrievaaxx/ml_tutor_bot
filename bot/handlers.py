@@ -10,7 +10,7 @@ from aiogram import Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
-from bot.dialog import clear_dialog, add_user_message, add_assistant_message, get_dialog_history, extract_user_level
+from bot.dialog import clear_dialog, add_user_message, add_assistant_message, get_dialog_history, extract_user_level, get_user_level_or_default
 from bot.prompts import get_system_prompt, get_welcome_message
 from bot.progress import get_user_progress, mark_topic_completed
 from llm.client import get_llm_response, get_llm_response_for_test
@@ -179,13 +179,19 @@ async def handle_status(message: Message):
     
     # Получаем статистику диалога
     dialog_history = get_dialog_history(chat_id)
-    current_level = extract_user_level(chat_id)
+    current_level = get_user_level_or_default(chat_id)
     
     # Получаем статистику прогресса
     progress_stats = progress_tracker.get_user_stats(user_id)
     
+    # Проверяем, был ли уровень установлен автоматически
+    original_level = extract_user_level(chat_id)
+    level_note = ""
+    if original_level is None:
+        level_note = " (установлен автоматически)"
+    
     status_text = f"📊 **Ваш текущий статус:**\n\n"
-    status_text += f"🎯 **Уровень знаний:** {current_level}\n"
+    status_text += f"🎯 **Уровень знаний:** {current_level}{level_note}\n"
     status_text += f"💬 **Сообщений в диалоге:** {len(dialog_history)}\n"
     status_text += f"📈 **Изученных тем:** {progress_stats.get('topics_studied', 0)}\n"
     status_text += f"⏱️ **Время обучения:** {progress_stats.get('learning_time', '0 мин')}\n\n"
@@ -439,6 +445,17 @@ async def handle_message(message: Message):
     
     logger.info(f"Сообщение от пользователя {user_id}: {text[:50]}...")
     
+    # Проверяем, есть ли у пользователя выбранный уровень
+    current_level = extract_user_level(chat_id)
+    if current_level is None:
+        # Устанавливаем уровень по умолчанию и уведомляем пользователя
+        default_level = get_user_level_or_default(chat_id)
+        await message.answer(
+            f"ℹ️ Уровень знаний не был выбран, поэтому установлен уровень по умолчанию: **{default_level}**\n\n"
+            f"Если хотите изменить уровень, используйте команду /level",
+            parse_mode="Markdown"
+        )
+    
     # Добавляем сообщение пользователя в историю
     add_user_message(chat_id, text)
     
@@ -614,7 +631,10 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
             
         except Exception as format_error:
             logger.error(f"Ошибка форматирования промпта: {format_error}")
-            await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+            try:
+                await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+            except Exception:
+                await callback_query.message.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
             return
         
         logger.info(f"Промпт сформирован, длина: {len(prompt)} символов")
@@ -634,7 +654,10 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         # Проверяем, что ответ не пустой и содержит достаточно информации
         if len(clean_response) < 10 or clean_response in ['<s>', '</s>', '<s></s>']:
             logger.warning(f"LLM вернул слишком короткий ответ: '{clean_response}'")
-            await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+            try:
+                await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+            except Exception:
+                await callback_query.message.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
             return
         
         logger.info(f"Очищенный ответ LLM: {clean_response[:200]}...")
@@ -733,7 +756,10 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
                     response = await get_llm_response_for_test(retry_prompt)
                 except Exception as retry_error:
                     logger.error(f"Ошибка повторной генерации: {retry_error}")
-                    await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+                    try:
+                        await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+                    except Exception:
+                        await callback_query.message.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
                     return
                 
                 clean_response = response.strip()
@@ -817,11 +843,18 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         test_text = f"🧪 Тест по уроку: {lesson.title}\n\n{question}\n\nВыберите правильный ответ:"
         
         await callback_query.message.edit_text(test_text, reply_markup=keyboard)
-        await callback_query.answer()
+        try:
+            await callback_query.answer()
+        except Exception:
+            # Callback query истек, но тест уже отправлен
+            pass
         
     except Exception as e:
         logger.error(f"Ошибка генерации теста: {e}")
-        await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+        try:
+            await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+        except Exception:
+            await callback_query.message.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
 
 
 async def handle_test_answer(callback_query: CallbackQuery):
@@ -1001,6 +1034,17 @@ async def handle_photo(message: Message):
     
     logger.info(f"Фото от пользователя {user_id}")
     
+    # Проверяем, есть ли у пользователя выбранный уровень
+    current_level = extract_user_level(chat_id)
+    if current_level is None:
+        # Устанавливаем уровень по умолчанию и уведомляем пользователя
+        default_level = get_user_level_or_default(chat_id)
+        await message.answer(
+            f"ℹ️ Уровень знаний не был выбран, поэтому установлен уровень по умолчанию: **{default_level}**\n\n"
+            f"Если хотите изменить уровень, используйте команду /level",
+            parse_mode="Markdown"
+        )
+    
     # Отправляем индикатор обработки
     processing_msg = await message.answer("📷 Анализирую изображение...")
     
@@ -1076,6 +1120,17 @@ async def handle_voice(message: Message):
     chat_id = message.chat.id
     
     logger.info(f"Голосовое сообщение от пользователя {user_id}")
+    
+    # Проверяем, есть ли у пользователя выбранный уровень
+    current_level = extract_user_level(chat_id)
+    if current_level is None:
+        # Устанавливаем уровень по умолчанию и уведомляем пользователя
+        default_level = get_user_level_or_default(chat_id)
+        await message.answer(
+            f"ℹ️ Уровень знаний не был выбран, поэтому установлен уровень по умолчанию: **{default_level}**\n\n"
+            f"Если хотите изменить уровень, используйте команду /level",
+            parse_mode="Markdown"
+        )
     
     # Отправляем индикатор обработки
     processing_msg = await message.answer("🎤 Обрабатываю голосовое сообщение...")

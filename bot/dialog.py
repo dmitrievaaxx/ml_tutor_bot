@@ -66,6 +66,26 @@ def extract_user_level(chat_id: int) -> str:
     return None
 
 
+def get_user_level_or_default(chat_id: int) -> str:
+    """
+    Получает уровень пользователя или устанавливает уровень по умолчанию
+    
+    Args:
+        chat_id: ID чата в Telegram
+        
+    Returns:
+        str: Уровень пользователя ('Новичок', 'Базовый', 'Продвинутый')
+    """
+    user_level = extract_user_level(chat_id)
+    if user_level is None:
+        # Устанавливаем уровень по умолчанию
+        default_level = "Базовый"
+        add_user_message(chat_id, default_level)
+        logger.info(f"Установлен уровень по умолчанию '{default_level}' для chat_id={chat_id}")
+        return default_level
+    return user_level
+
+
 def is_first_level_selection(chat_id: int) -> bool:
     """
     Определяет, является ли текущий выбор уровня первым
@@ -99,6 +119,7 @@ def get_dialog_history(chat_id: int) -> list:
     
     Если диалог не существует, создаёт новый с системным промптом.
     Автоматически обновляет системный промпт при смене уровня.
+    Если уровень не выбран, устанавливает уровень по умолчанию.
     
     Args:
         chat_id: ID чата в Telegram
@@ -108,15 +129,14 @@ def get_dialog_history(chat_id: int) -> list:
 
     """
     if chat_id not in _dialogs:
-        # Инициализация нового диа
-        # лога с системным промптом
+        # Инициализация нового диалога с системным промптом
         _dialogs[chat_id] = [
             {"role": "system", "content": get_system_prompt()}
         ]
         logger.info(f"Создан новый диалог для chat_id={chat_id}")
     else:
         # Проверяем, нужно ли обновить системный промпт на основе уровня
-        user_level = extract_user_level(chat_id)
+        user_level = get_user_level_or_default(chat_id)
         if user_level:
             # Обновляем системный промпт (всегда первый элемент)
             new_prompt = get_system_prompt(user_level)
