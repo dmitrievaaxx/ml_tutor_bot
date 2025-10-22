@@ -545,10 +545,20 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
     
     # Генерируем тестовый вопрос
     try:
-        prompt = TEST_GENERATION_PROMPT.format(
-            lesson_title=lesson.title,
-            lesson_content=lesson.content
-        )
+        logger.info(f"Генерируем тест для урока: {lesson.title}")
+        
+        # Безопасно форматируем промпт
+        try:
+            prompt = TEST_GENERATION_PROMPT.format(
+                lesson_title=lesson.title.replace('{', '{{').replace('}', '}}'),
+                lesson_content=lesson.content.replace('{', '{{').replace('}', '}}')
+            )
+        except Exception as format_error:
+            logger.error(f"Ошибка форматирования промпта: {format_error}")
+            await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+            return
+        
+        logger.info(f"Промпт сформирован, длина: {len(prompt)} символов")
         
         response = await get_llm_response([{"role": "user", "content": prompt}])
         
@@ -631,8 +641,17 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         if _is_mathematical_question(question):
             if not _validate_mathematical_answer(question, options, correct_answer):
                 logger.warning(f"Математически некорректный ответ, генерируем новый")
-                # Попробуем сгенерировать еще раз
-                response = await get_llm_response([{"role": "user", "content": prompt}])
+                # Попробуем сгенерировать еще раз с новым промптом
+                try:
+                    retry_prompt = TEST_GENERATION_PROMPT.format(
+                        lesson_title=lesson.title.replace('{', '{{').replace('}', '}}'),
+                        lesson_content=lesson.content.replace('{', '{{').replace('}', '}}')
+                    )
+                    response = await get_llm_response([{"role": "user", "content": retry_prompt}])
+                except Exception as retry_error:
+                    logger.error(f"Ошибка повторной генерации: {retry_error}")
+                    await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+                    return
                 clean_response = response.strip()
                 if clean_response.startswith('<s>'):
                     clean_response = clean_response[3:].strip()
