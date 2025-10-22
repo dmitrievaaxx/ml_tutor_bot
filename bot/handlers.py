@@ -88,7 +88,7 @@ async def handle_start(message: Message):
         ]
     ])
     
-    welcome_text = get_welcome_message()
+    welcome_text = get_welcome_message("Базовый")
     await message.answer(welcome_text, reply_markup=keyboard)
 
 
