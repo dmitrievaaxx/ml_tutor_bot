@@ -572,11 +572,9 @@ async def handle_lesson_callback(callback_query: CallbackQuery):
     elif data.startswith("back_to_course_"):
         # Возврат к плану курса
         course_id = int(data.split("_")[-1])
-        await callback_query.message.delete()
         # Создаем временный callback с правильными данными
         callback_query.data = f"course_{course_id}"
         await handle_course_selection(callback_query)
-        await callback_query.answer()
 
 
 async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
