@@ -1153,8 +1153,17 @@ async def handle_voice(message: Message):
         # Создаем клиент для распознавания речи
         speech_client = HuggingFaceSpeechClient()
         
+        # Проверяем, настроен ли клиент
+        if not speech_client.api_token:
+            await processing_msg.edit_text(
+                "❌ Голосовые сообщения временно недоступны. "
+                "Для их работы необходимо настроить Hugging Face API токен. "
+                "Пожалуйста, используйте текстовые сообщения."
+            )
+            return
+        
         # Конвертируем аудио в текст
-        text = await speech_client.transcribe_audio(file_content.read())
+        text = await speech_client.transcribe_audio_data(file_content.read(), ".ogg")
         
         if text and text.strip():
             # Добавляем сообщение пользователя в историю

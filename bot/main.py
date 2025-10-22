@@ -58,6 +58,15 @@ async def main():
     setup_logging()
     logger = logging.getLogger(__name__)
     
+    # Отладочная информация о переменных окружения
+    logger.info("=== ПРОВЕРКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ===")
+    logger.info(f"TELEGRAM_BOT_TOKEN: {'ДА' if os.getenv('TELEGRAM_BOT_TOKEN') else 'НЕТ'}")
+    logger.info(f"OPENROUTER_API_KEY: {'ДА' if os.getenv('OPENROUTER_API_KEY') else 'НЕТ'}")
+    logger.info(f"HUGGINGFACE_API_TOKEN: {'ДА' if os.getenv('HUGGINGFACE_API_TOKEN') else 'НЕТ'}")
+    logger.info(f"LLM_MODEL: {os.getenv('LLM_MODEL', 'НЕ УСТАНОВЛЕН')}")
+    logger.info(f"VISION_MODEL: {os.getenv('VISION_MODEL', 'НЕ УСТАНОВЛЕН')}")
+    logger.info("=====================================")
+    
     # Получение токена из переменных окружения
     token = os.getenv('TELEGRAM_BOT_TOKEN')
     if not token:

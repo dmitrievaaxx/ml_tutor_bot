@@ -44,6 +44,9 @@ cd ml_tutor_bot
 #### 2.2. Получение API ключа OpenRouter
 Следуйте инструкции в [doc/guides/openrouter_setup.md](doc/guides/openrouter_setup.md) для регистрации на OpenRouter и получения бесплатного API ключа.
 
+#### 2.3. Получение API ключа Hugging Face (опционально)
+Для работы с голосовыми сообщениями следуйте инструкции в [doc/guides/huggingface_setup.md](doc/guides/huggingface_setup.md) для получения токена Hugging Face API.
+
 ### Шаг 3: Настройка переменных окружения
 
 Создайте файл `.env` в корне проекта:
@@ -65,6 +68,7 @@ LLM_MODEL=mistralai/mistral-7b-instruct:free
 VISION_MODEL=google/gemini-flash-1.5
 LLM_TEMPERATURE=0.7
 LLM_MAX_TOKENS=500
+HUGGINGFACE_API_TOKEN=ваш_токен_от_huggingface
 LOG_LEVEL=INFO
 ```
 
