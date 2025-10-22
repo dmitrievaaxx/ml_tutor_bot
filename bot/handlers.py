@@ -339,6 +339,9 @@ async def handle_course_selection(callback_query: CallbackQuery):
             db.init_user_progress(user_id, course_id)
             progress = db.get_user_progress(user_id, course_id)
         
+        # Получаем список завершенных уроков
+        completed_lessons = db.get_user_completed_lessons(user_id, course_id)
+        
         # Формируем план курса с прогрессом
         plan_text = f"🧠 **МАТЕМАТИЧЕСКИЕ ОСНОВЫ ML**\n\n"
         plan_text += f"📊 Прогресс: {progress.completed_lessons}/{course.total_lessons} уроков завершено\n"
@@ -360,7 +363,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
         for i, lesson_title in enumerate(linear_algebra_lessons, 1):
             lesson = db.get_lesson(course_id, i)
             if lesson:
-                is_completed = progress.completed_lessons >= i
+                is_completed = i in completed_lessons
                 status = "✅" if is_completed else ""
                 plan_text += f"{status} {i}. {lesson_title}\n"
             else:
@@ -381,7 +384,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
         for i, lesson_title in enumerate(math_optimization_lessons, 6):
             lesson = db.get_lesson(course_id, i)
             if lesson:
-                is_completed = progress.completed_lessons >= i
+                is_completed = i in completed_lessons
                 status = "✅" if is_completed else ""
                 plan_text += f"{status} {i}. {lesson_title}\n"
             else:
@@ -399,7 +402,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
         for i, lesson_title in enumerate(probability_stats_lessons, 14):
             lesson = db.get_lesson(course_id, i)
             if lesson:
-                is_completed = progress.completed_lessons >= i
+                is_completed = i in completed_lessons
                 status = "✅" if is_completed else ""
                 plan_text += f"{status} {i}. {lesson_title}\n"
             else:
@@ -944,10 +947,18 @@ async def handle_test_answer(callback_query: CallbackQuery):
             
             if lesson and course_id:
                 progress = db.get_user_progress(user_id, course_id)
+                if not progress:
+                    # Инициализируем прогресс пользователя, если его нет
+                    db.init_user_progress(user_id, course_id)
+                    progress = db.get_user_progress(user_id, course_id)
+                
                 if progress:
                     completed_lessons = progress.completed_lessons + 1
                     next_lesson = lesson.lesson_number + 1
                     db.update_user_progress(user_id, course_id, next_lesson, completed_lessons)
+                    # Сохраняем информацию о завершенном уроке
+                    db.complete_lesson(user_id, lesson.id)
+                    logger.info(f"Обновлен прогресс пользователя {user_id}: урок {lesson.lesson_number} завершен, следующий урок {next_lesson}, завершено уроков {completed_lessons}")
             
             await callback_query.message.edit_text(
                 "✅ Правильно! Урок завершен.\n\n"

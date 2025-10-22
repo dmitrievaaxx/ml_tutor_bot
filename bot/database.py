@@ -322,6 +322,24 @@ class Database:
         conn.commit()
         conn.close()
     
+    def get_user_completed_lessons(self, user_id: int, course_id: int) -> List[int]:
+        """Get list of completed lesson numbers for a user in a course"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT l.lesson_number
+            FROM lesson_completions lc
+            JOIN lessons l ON lc.lesson_id = l.id
+            WHERE lc.user_id = ? AND l.course_id = ?
+            ORDER BY l.lesson_number
+        """, (user_id, course_id))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [row[0] for row in rows]
+    
     def get_user_test_errors(self, user_id: int) -> List[TestError]:
         """Get all test errors for a user"""
         conn = self.get_connection()
