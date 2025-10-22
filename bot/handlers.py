@@ -375,7 +375,7 @@ async def handle_message(message: Message):
     
     # Отправляем запрос к LLM
     try:
-        response = await get_llm_response(text, user_id, dialog_history, system_prompt)
+        response = await get_llm_response(dialog_history)
         
         # Добавляем ответ в историю
         add_assistant_message(chat_id, response)
@@ -500,7 +500,9 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
             lesson_content=lesson.content
         )
         
-        response = await get_llm_response(prompt, user_id)
+        response = await get_llm_response([{"role": "user", "content": prompt}])
+        
+        logger.info(f"Ответ LLM для генерации теста: {response[:300]}...")
         
         # Парсим ответ
         lines = response.strip().split('\n')
@@ -508,12 +510,10 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
         options = []
         correct_answer = ""
         
-        parsing_mode = "question"
         for line in lines:
             line = line.strip()
             if line.startswith("Вопрос:"):
                 question = line.replace("Вопрос:", "").strip()
-                parsing_mode = "options"
             elif line.startswith("A)"):
                 options.append(line.replace("A)", "").strip())
             elif line.startswith("B)"):
@@ -523,8 +523,26 @@ async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
             elif line.startswith("Правильный ответ:"):
                 correct_answer = line.replace("Правильный ответ:", "").strip()
         
+        # Если не удалось распарсить, попробуем альтернативный формат
+        if not question or len(options) != 3 or not correct_answer:
+            logger.warning(f"Не удалось распарсить ответ LLM: {response[:200]}...")
+            # Попробуем найти вопрос и варианты по другим паттернам
+            for line in lines:
+                line = line.strip()
+                if not question and ("?" in line or "равен" in line or "равна" in line):
+                    question = line
+                elif line.startswith("A)") or line.startswith("A."):
+                    options.append(line[2:].strip())
+                elif line.startswith("B)") or line.startswith("B."):
+                    options.append(line[2:].strip())
+                elif line.startswith("C)") or line.startswith("C."):
+                    options.append(line[2:].strip())
+                elif "правильный" in line.lower() and ("A" in line or "B" in line or "C" in line):
+                    correct_answer = line.split()[-1].strip()
+        
         if not question or len(options) != 3 or not correct_answer:
             await callback_query.answer("❌ Ошибка генерации теста. Попробуйте еще раз.")
+            logger.error(f"Не удалось сгенерировать тест. Вопрос: '{question}', Варианты: {options}, Правильный: '{correct_answer}'")
             return
             
         # Создаем клавиатуру с вариантами ответов
