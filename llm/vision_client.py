@@ -79,8 +79,16 @@ async def get_vision_response(messages: list, image_base64: str, image_format: s
         return ""
     
     # Получение параметров модели из переменных окружения
-    # Используем Google Gemini Flash для Vision - надежная модель с хорошей поддержкой изображений
-    model = os.getenv('VISION_MODEL', 'google/gemini-flash-1.5:free')
+    # Список Vision моделей в порядке приоритета
+    fallback_models = [
+        'meta-llama/llama-3.3-70b-instruct:free',    # Llama 3.3 70B - основная модель с Vision
+        'deepseek/deepseek-r1-0528-qwen3-8b:free',   # DeepSeek R1 - fallback 1
+        'qwen/qwen3-coder:free',                      # Qwen3 Coder - fallback 2
+        'mistralai/mistral-7b-instruct:free',         # Mistral 7B - fallback 3
+        'meta-llama/llama-3.2-3b-instruct:free',     # Llama 3.2 3B - fallback 4
+    ]
+    
+    model = os.getenv('VISION_MODEL', fallback_models[0])
     temperature = float(os.getenv('LLM_TEMPERATURE', '0.7'))
     max_tokens = int(os.getenv('LLM_MAX_TOKENS', '1000'))
     
@@ -91,25 +99,29 @@ async def get_vision_response(messages: list, image_base64: str, image_format: s
         f"Размер изображения: {len(image_base64)} символов base64"
     )
     
-    try:
-        # Формируем запрос с изображением
-        vision_messages = messages.copy()
-        last_message = vision_messages[-1]
-        
-        # Добавляем специальную инструкцию для Vision API в системный промпт
-        if vision_messages and vision_messages[0]["role"] == "system":
-            original_prompt = vision_messages[0]["content"]
+    # Пробуем разные модели, если основная не работает
+    for attempt, current_model in enumerate(fallback_models):
+        try:
+            logger.info(f"Попытка {attempt + 1}: используем Vision модель {current_model}")
             
-            # Определяем уровень пользователя из системного промпта
-            user_level = "Базовый"  # по умолчанию
-            if "Новичок" in original_prompt:
-                user_level = "Новичок"
-            elif "Продвинутый" in original_prompt:
-                user_level = "Продвинутый"
-            elif "Базовый" in original_prompt:
-                user_level = "Базовый"
+            # Формируем запрос с изображением
+            vision_messages = messages.copy()
+            last_message = vision_messages[-1]
             
-            vision_messages[0]["content"] = f"""{original_prompt}
+            # Добавляем специальную инструкцию для Vision API в системный промпт
+            if vision_messages and vision_messages[0]["role"] == "system":
+                original_prompt = vision_messages[0]["content"]
+                
+                # Определяем уровень пользователя из системного промпта
+                user_level = "Базовый"  # по умолчанию
+                if "Новичок" in original_prompt:
+                    user_level = "Новичок"
+                elif "Продвинутый" in original_prompt:
+                    user_level = "Продвинутый"
+                elif "Базовый" in original_prompt:
+                    user_level = "Базовый"
+                
+                vision_messages[0]["content"] = f"""{original_prompt}
 
 ВАЖНАЯ ИНСТРУКЦИЯ ДЛЯ АНАЛИЗА ИЗОБРАЖЕНИЙ:
 - Пользователь отправил изображение - ты ДОЛЖЕН сначала проанализировать его содержимое
@@ -137,83 +149,117 @@ async def get_vision_response(messages: list, image_base64: str, image_format: s
 - Приведи простую аналогию из жизни
 - Укажи, в каких задачах ML применяется эта формула
 - Предложи 2-3 связанные темы для дальнейшего изучения
-            """
-            logger.info(f"Системный промпт дополнен инструкциями для Vision API")
-        
-        # Добавляем изображение к последнему сообщению пользователя
-        # Формируем текст запроса с явным указанием на необходимость анализа изображения
-        user_text = last_message["content"] if last_message["content"] else ""
-        
-        # Если пользователь не добавил текст, используем явную инструкцию
-        if not user_text or user_text == "Что на этом изображении?":
-            user_text = "Проанализируй это изображение. Опиши детально, что на нем изображено (формулы, схемы, графики, текст, код), и объясни в контексте машинного обучения."
-        else:
-            # Если пользователь добавил подпись, дополняем её инструкцией
-            user_text = f"[ИЗОБРАЖЕНИЕ] {user_text}"
-        
-        vision_messages[-1] = {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": user_text
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/{image_format};base64,{image_base64}"
+                """
+                logger.info(f"Системный промпт дополнен инструкциями для Vision API")
+            
+            # Добавляем изображение к последнему сообщению пользователя
+            # Формируем текст запроса с явным указанием на необходимость анализа изображения
+            user_text = last_message["content"] if last_message["content"] else ""
+            
+            # Если пользователь не добавил текст, используем явную инструкцию
+            if not user_text or user_text == "Что на этом изображении?":
+                user_text = "Проанализируй это изображение. Опиши детально, что на нем изображено (формулы, схемы, графики, текст, код), и объясни в контексте машинного обучения."
+            else:
+                # Если пользователь добавил подпись, дополняем её инструкцией
+                user_text = f"[ИЗОБРАЖЕНИЕ] {user_text}"
+            
+            vision_messages[-1] = {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": user_text
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/{image_format};base64,{image_base64}"
+                        }
                     }
-                }
-            ]
-        }
-        
-        # Логируем структуру запроса для отладки
-        logger.info(f"Vision запрос содержит {len(vision_messages)} сообщений")
-        logger.info(f"Текст запроса к изображению: '{user_text}'")
-        logger.info(f"Формат изображения: {image_format}, размер base64: {len(image_base64)} символов")
-        
-        # Проверяем, что изображение действительно добавлено
-        last_msg_content = vision_messages[-1]["content"]
-        if isinstance(last_msg_content, list) and len(last_msg_content) >= 2:
-            logger.info("✅ Изображение успешно добавлено к сообщению")
-        else:
-            logger.error("❌ ОШИБКА: Изображение НЕ добавлено к сообщению!")
-        
-        # Запрос к Vision API
-        response = await client.chat.completions.create(
-            model=model,
-            messages=vision_messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        
-        # Извлечение текста ответа
-        answer = response.choices[0].message.content
-        
-        # Логирование ответа
-        logger.info(
-            f"Ответ от Vision API | Модель: {model} | Длина: {len(answer)} символов | "
-            f"Начало: {answer[:50]}{'...' if len(answer) > 50 else ''}"
-        )
-        
-        return answer
-        
-    except Exception as e:
-        logger.error(f"Ошибка Vision API с моделью {model}: {type(e).__name__}: {e}")
-        
-        # Детальная диагностика ошибок
-        if "rate limit" in str(e).lower():
-            logger.error("Превышен лимит запросов к Vision API")
-            return "Извините, превышен лимит запросов к Vision API. Попробуйте позже."
-        elif "invalid" in str(e).lower() and "image" in str(e).lower():
-            logger.error("Неподдерживаемый формат изображения")
-            return "Извините, формат изображения не поддерживается. Попробуйте отправить изображение в формате JPEG или PNG."
-        elif "timeout" in str(e).lower():
-            logger.error("Таймаут запроса к Vision API")
-            return "Извините, запрос к Vision API занял слишком много времени. Попробуйте еще раз."
-        elif "model" in str(e).lower() and "not found" in str(e).lower():
-            logger.error("Vision модель недоступна")
-            return "Извините, Vision модель временно недоступна. Попробуйте позже."
-        else:
-            logger.error(f"Неизвестная ошибка Vision API: {e}")
-            return f"Извините, произошла ошибка при анализе изображения: {type(e).__name__}. Попробуйте отправить другое фото."
+                ]
+            }
+            
+            # Логируем структуру запроса для отладки
+            logger.info(f"Vision запрос содержит {len(vision_messages)} сообщений")
+            logger.info(f"Текст запроса к изображению: '{user_text}'")
+            logger.info(f"Формат изображения: {image_format}, размер base64: {len(image_base64)} символов")
+            
+            # Проверяем, что изображение действительно добавлено
+            last_msg_content = vision_messages[-1]["content"]
+            if isinstance(last_msg_content, list) and len(last_msg_content) >= 2:
+                logger.info("✅ Изображение успешно добавлено к сообщению")
+            else:
+                logger.error("❌ ОШИБКА: Изображение НЕ добавлено к сообщению!")
+            
+            # Запрос к Vision API
+            response = await client.chat.completions.create(
+                model=current_model,
+                messages=vision_messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            # Извлечение текста ответа
+            answer = response.choices[0].message.content
+            
+            # Очистка ответа от токенов модели
+            if answer:
+                # Убираем токены начала и конца
+                answer = answer.strip()
+                if answer.startswith('<s>'):
+                    answer = answer[3:].strip()
+                if answer.endswith('</s>'):
+                    answer = answer[:-4].strip()
+                
+                # Убираем другие служебные токены
+                answer = answer.replace('[OUT]', '').strip()
+                answer = answer.replace('[INST]', '').strip()
+                answer = answer.replace('[/INST]', '').strip()
+            
+            # Логирование ответа
+            logger.info(
+                f"Ответ от Vision API | Модель: {current_model} | Длина: {len(answer)} символов | "
+                f"Начало: {answer[:50]}{'...' if len(answer) > 50 else ''}"
+            )
+            
+            return answer
+            
+        except Exception as e:
+            logger.error(f"Ошибка Vision API с моделью {current_model}: {type(e).__name__}: {e}")
+            
+            # Детальная диагностика ошибок
+            if "rate limit" in str(e).lower():
+                logger.error("Превышен лимит запросов к Vision API")
+                if attempt < len(fallback_models) - 1:
+                    logger.info(f"Пробуем следующую Vision модель...")
+                    continue
+                else:
+                    return "Извините, превышен лимит запросов к Vision API. Попробуйте позже."
+            elif "invalid" in str(e).lower() and "image" in str(e).lower():
+                logger.error("Неподдерживаемый формат изображения")
+                return "Извините, формат изображения не поддерживается. Попробуйте отправить изображение в формате JPEG или PNG."
+            elif "timeout" in str(e).lower():
+                logger.error("Таймаут запроса к Vision API")
+                if attempt < len(fallback_models) - 1:
+                    logger.info(f"Пробуем следующую Vision модель...")
+                    continue
+                else:
+                    return "Извините, запрос к Vision API занял слишком много времени. Попробуйте еще раз."
+            elif "model" in str(e).lower() and "not found" in str(e).lower():
+                logger.error("Vision модель недоступна")
+                if attempt < len(fallback_models) - 1:
+                    logger.info(f"Пробуем следующую Vision модель...")
+                    continue
+                else:
+                    return "Извините, Vision модель временно недоступна. Попробуйте позже."
+            else:
+                logger.error(f"Неизвестная ошибка Vision API: {e}")
+                if attempt < len(fallback_models) - 1:
+                    logger.info(f"Пробуем следующую Vision модель...")
+                    continue
+                else:
+                    return f"Извините, произошла ошибка при анализе изображения: {type(e).__name__}. Попробуйте отправить другое фото."
+    
+    # Если все модели недоступны
+    logger.error("Все Vision модели недоступны")
+    return "Извините, все Vision модели временно недоступны. Попробуйте позже."
