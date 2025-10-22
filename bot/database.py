@@ -174,6 +174,24 @@ class Database:
         
         conn.close()
     
+    def get_all_courses(self) -> List[Course]:
+        """Get all courses"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, name, description, total_lessons
+            FROM courses ORDER BY id
+        """)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [
+            Course(id=row[0], name=row[1], description=row[2], total_lessons=row[3])
+            for row in rows
+        ]
+    
     def get_course_by_name(self, name: str):
         """Get course by name"""
         conn = self.get_connection()

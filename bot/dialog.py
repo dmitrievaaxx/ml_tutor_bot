@@ -78,10 +78,9 @@ def get_user_level_or_default(chat_id: int) -> str:
     """
     user_level = extract_user_level(chat_id)
     if user_level is None:
-        # Устанавливаем уровень по умолчанию
+        # Возвращаем уровень по умолчанию без добавления в историю
         default_level = "Базовый"
-        add_user_message(chat_id, default_level)
-        logger.info(f"Установлен уровень по умолчанию '{default_level}' для chat_id={chat_id}")
+        logger.info(f"Возвращен уровень по умолчанию '{default_level}' для chat_id={chat_id}")
         return default_level
     return user_level
 
