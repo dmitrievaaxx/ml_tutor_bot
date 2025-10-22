@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
 from bot.handlers import register_handlers
+from bot.database import Database
 
 
 # Загрузка переменных окружения из .env файла
@@ -32,7 +33,10 @@ async def setup_bot_commands(bot: Bot):
     """
     commands = [
         BotCommand(command="start", description="🚀 Начать обучение ML"),
+        BotCommand(command="start_course", description="📚 Начать курс Math"),
         BotCommand(command="learn", description="📚 Список учебных курсов"),
+        BotCommand(command="profile", description="👤 Мой профиль"),
+        BotCommand(command="errors", description="❌ Мои ошибки"),
         BotCommand(command="level", description="📊 Сменить уровень знаний"),
         BotCommand(command="status", description="ℹ️ Показать текущий уровень"),
     ]
@@ -69,6 +73,25 @@ async def main():
     
     # Настройка команд бота для отображения в меню
     await setup_bot_commands(bot)
+    
+    # Инициализация базы данных
+    logger.info("Инициализация базы данных...")
+    db = Database()
+    
+    # Проверяем, есть ли курс Math, если нет - загружаем
+    math_course = db.get_course(1)
+    if not math_course:
+        logger.info("Загрузка курса Math...")
+        try:
+            from pathlib import Path
+            json_path = Path(__file__).parent.parent / "data" / "math_course.json"
+            if json_path.exists():
+                course_id = db.load_course_from_json(str(json_path))
+                logger.info(f"Курс Math загружен с ID: {course_id}")
+            else:
+                logger.warning("Файл курса Math не найден")
+        except Exception as e:
+            logger.error(f"Ошибка загрузки курса: {e}")
     
     # Регистрация обработчиков команд и сообщений
     register_handlers(dp)

@@ -238,3 +238,4 @@ def format_course_progress_text(user_id: int, course_type: str) -> str:
         result += "\n"
     
     return result
+
