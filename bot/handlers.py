@@ -26,14 +26,12 @@ class LearningProgressTracker:
     
     def get_user_stats(self, user_id: int) -> dict:
         """Получить статистику пользователя"""
-        progress = get_user_progress(user_id)
-        
         # Получаем статистику тестов из базы данных
         test_errors = db.get_user_test_errors(user_id)
-        successful_tests = max(0, len(progress) - len(test_errors))  # Примерная оценка
+        successful_tests = 0  # Упрощенная логика
         
         return {
-            'topics_studied': len(progress),
+            'topics_studied': 0,  # Упрощенная логика
             'learning_time': '0 мин',  # Заглушка
             'successful_tests': successful_tests,
             'test_errors': len(test_errors)
@@ -74,8 +72,15 @@ async def handle_start(message: Message):
     
     logger.info(f"Команда /start от пользователя {user_id} (@{username})")
     
+    # Сохраняем текущий уровень перед очисткой диалога
+    current_level = get_user_level_or_default(chat_id)
+    
     # Очистка истории диалога при старте (прогресс курсов сохраняется)
     clear_dialog(chat_id)
+    
+    # Восстанавливаем уровень после очистки диалога
+    if current_level != "Базовый":  # Если уровень не по умолчанию
+        add_user_message(chat_id, current_level)
     
     # Формируем приветственное сообщение
     welcome_text = f"""Привет! 👋
@@ -251,11 +256,15 @@ async def handle_clear(message: Message):
         message: Объект сообщения от пользователя
     """
     user_id = message.from_user.id
+    chat_id = message.chat.id
     
     logger.info(f"Команда /clear от пользователя {user_id}")
     
     # Очищаем весь прогресс пользователя
     db.clear_user_progress(user_id)
+    
+    # Очищаем диалог
+    clear_dialog(chat_id)
     
     clear_text = """🗑️ **Очистка завершена!**
 
@@ -652,16 +661,75 @@ async def handle_lesson_callback(callback_query: CallbackQuery):
     elif data.startswith("back_to_course_"):
         # Возврат к плану курса
         course_id = int(data.split("_")[-1])
-        # Создаем новый callback query с правильными данными
-        from aiogram.types import CallbackQuery
-        new_callback = CallbackQuery(
-            id=callback_query.id,
-            from_user=callback_query.from_user,
-            message=callback_query.message,
-            data=f"course_{course_id}",
-            chat_instance=callback_query.chat_instance
-        )
-        await handle_course_selection(new_callback)
+        # Прямо вызываем обработку курса без создания нового CallbackQuery
+        await callback_query.message.edit_text("🔄 Возвращаемся к курсу...")
+        
+        # Получаем курс
+        course = db.get_course(course_id)
+        if not course:
+            await callback_query.message.edit_text("❌ Курс не найден.")
+            await callback_query.answer()
+            return
+        
+        # Получаем прогресс пользователя
+        progress = db.get_user_progress(user_id, course_id)
+        
+        # Формируем текст плана курса
+        plan_text = f"🧠 **{course.name.upper()}**\n\n"
+        
+        if progress:
+            plan_text += f"📊 Прогресс: {progress.completed_lessons}/{course.total_lessons} уроков завершено\n\n"
+        else:
+            plan_text += f"📊 Прогресс: 0/{course.total_lessons} уроков завершено\n\n"
+        
+        plan_text += f"📋 **План курса:**\n"
+        
+        # Получаем список завершенных уроков
+        completed_lessons = db.get_user_completed_lessons(user_id, course_id)
+        
+        # Группируем уроки по разделам
+        sections = {
+            "ЛИНЕЙНАЯ АЛГЕБРА": list(range(1, 6)),
+            "МАТАН И ОПТИМИЗАЦИЯ": list(range(6, 14)),
+            "ВЕРОЯТНОСТЬ И СТАТИСТИКА": list(range(14, 19))
+        }
+        
+        for section_name, lesson_range in sections.items():
+            plan_text += f"▲ {section_name}\n"
+            for i in lesson_range:
+                lesson = db.get_lesson(course_id, i)
+                if lesson:
+                    lesson_title = lesson.title
+                    if i in completed_lessons:
+                        plan_text += f"✅ {i}. {lesson_title}\n"
+                    else:
+                        plan_text += f"  {i}. {lesson_title}\n"
+            plan_text += "\n"
+        
+        # Создаем клавиатуру
+        keyboard_buttons = []
+        
+        # Кнопки для уроков (показываем только первые 5 для компактности)
+        for i in range(1, min(6, course.total_lessons + 1)):
+            lesson = db.get_lesson(course_id, i)
+            if lesson:
+                lesson_text = f"✅ {i}" if i in completed_lessons else f"{i}"
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"{lesson_text}. {lesson.title[:30]}...",
+                        callback_data=f"lesson_{course_id}_{i}"
+                    )
+                ])
+        
+        # Кнопка "Меню курса"
+        keyboard_buttons.append([
+            InlineKeyboardButton(text="📚 Меню курса", callback_data=f"course_{course_id}")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+        
+        await callback_query.message.edit_text(plan_text, reply_markup=keyboard, parse_mode="Markdown")
+        await callback_query.answer()
 
 
 async def start_lesson_test(callback_query: CallbackQuery, lesson_id: int):
