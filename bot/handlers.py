@@ -632,9 +632,15 @@ async def handle_lesson_callback(callback_query: CallbackQuery):
         # Начало обучения - показываем текущий урок
         course_id = int(data.split("_")[2])
         progress = db.get_user_progress(user_id, course_id)
+        
+        # Определяем номер урока для начала
         if progress:
-            await callback_query.message.delete()
-            await show_lesson(callback_query.message, course_id, progress.current_lesson)
+            lesson_number = progress.current_lesson
+        else:
+            lesson_number = 1  # Начинаем с первого урока
+        
+        await callback_query.message.delete()
+        await show_lesson(callback_query.message, course_id, lesson_number)
         await callback_query.answer()
     
     elif data.startswith("lesson_"):
@@ -706,24 +712,12 @@ async def handle_lesson_callback(callback_query: CallbackQuery):
                         plan_text += f"  {i}. {lesson_title}\n"
             plan_text += "\n"
         
-        # Создаем клавиатуру
+        # Создаем клавиатуру только с кнопкой "Меню курса"
         keyboard_buttons = []
         
-        # Кнопки для уроков (показываем только первые 5 для компактности)
-        for i in range(1, min(6, course.total_lessons + 1)):
-            lesson = db.get_lesson(course_id, i)
-            if lesson:
-                lesson_text = f"✅ {i}" if i in completed_lessons else f"{i}"
-                keyboard_buttons.append([
-                    InlineKeyboardButton(
-                        text=f"{lesson_text}. {lesson.title[:30]}...",
-                        callback_data=f"lesson_{course_id}_{i}"
-                    )
-                ])
-        
-        # Кнопка "Меню курса"
+        # Кнопка "Назад к курсам"
         keyboard_buttons.append([
-            InlineKeyboardButton(text="📚 Меню курса", callback_data=f"course_{course_id}")
+            InlineKeyboardButton(text="← Назад к курсам", callback_data="back_to_courses")
         ])
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
