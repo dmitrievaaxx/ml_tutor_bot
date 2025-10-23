@@ -16,6 +16,10 @@ from bot.progress import get_user_progress, mark_topic_completed
 from llm.client import get_llm_response, get_llm_response_for_test
 from bot.database import Database
 from bot.test_prompts import TEST_GENERATION_PROMPT
+from bot.rag import RAGService
+import tempfile
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -299,6 +303,7 @@ async def handle_help(message: Message):
 • `/learn` - Выбрать курс для изучения
 • `/level` - Изменить уровень знаний
 • `/status` - Показать текущий статус
+• `/upload` - Загрузить PDF статью ArXiv
 • `/clear` - Очистить весь прогресс курсов
 • `/help` - Показать эту справку
 
@@ -308,10 +313,17 @@ async def handle_help(message: Message):
 3. Изучайте курсы командой `/learn`
 4. Отслеживайте прогресс в профиле
 
+**Новая функция - RAG для статей:**
+• `/upload` - загрузите PDF статью ArXiv
+• Задавайте вопросы по содержимому статьи
+• Получайте ответы с указанием источников
+• Загрузите новую статью - предыдущая заменится
+
 **Возможности:**
 • Адаптивные ответы под ваш уровень
 • Структурированные курсы с тестами
 • Отслеживание прогресса обучения
+• RAG поиск по PDF статьям ArXiv
 • Голосовые сообщения (в разработке)
 
 **Поддерживаемые темы:**
@@ -320,6 +332,7 @@ async def handle_help(message: Message):
 • Программирование на Python
 • Нейронные сети
 • Обработка данных
+• Научные статьи ArXiv
 
 Задавайте любые вопросы! 🚀
 """
@@ -548,9 +561,14 @@ async def handle_message(message: Message):
     # Получаем историю диалога
     dialog_history = get_dialog_history(chat_id)
     
-    # Отправляем запрос к LLM
+    # Проверяем режим: RAG (есть документ) или обычный
     try:
-        response = await get_llm_response(dialog_history)
+        if db.has_user_documents(user_id):
+            # Режим RAG - отвечаем по документу
+            response = await get_rag_response(text, user_id, dialog_history)
+        else:
+            # Обычный режим - как раньше
+            response = await get_llm_response(dialog_history)
         
         if response:
             # Добавляем ответ в историю
@@ -1379,6 +1397,169 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
         return True  # В случае ошибки считаем валидным
 
 
+# RAG обработчики (KISS принцип)
+async def handle_upload(message: Message):
+    """Обработка команды /upload - загрузка PDF статьи"""
+    user_id = message.from_user.id
+    
+    logger.info(f"Команда /upload от пользователя {user_id}")
+    
+    upload_text = """📄 **Загрузка PDF статьи ArXiv**
+
+Отправьте PDF файл статьи по машинному обучению.
+
+После загрузки я смогу отвечать на вопросы по содержимому статьи!
+
+💡 **Поддерживаемые форматы:**
+• PDF файлы статей ArXiv
+• Научные статьи по ML/DL
+• Техническая документация
+
+📝 **Как использовать:**
+1. Отправьте PDF файл
+2. Дождитесь обработки
+3. Задавайте вопросы по статье"""
+    
+    await message.answer(upload_text, parse_mode="Markdown")
+
+
+async def handle_pdf_file(message: Message):
+    """Обработка загруженного PDF файла (KISS принцип)"""
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    
+    logger.info(f"Загрузка PDF от пользователя {user_id}")
+    
+    if not message.document:
+        await message.answer("❌ Пожалуйста, отправьте файл как документ.")
+        return
+    
+    document = message.document
+    file_name = document.file_name
+    
+    if not file_name:
+        await message.answer("❌ Не удалось определить имя файла.")
+        return
+    
+    # Проверяем, что это PDF
+    if not file_name.lower().endswith('.pdf'):
+        await message.answer(
+            "❌ Поддерживаются только PDF файлы.\n\n"
+            "Пожалуйста, отправьте PDF статью."
+        )
+        return
+    
+    # Отправляем индикатор обработки
+    processing_msg = await message.answer("📄 Обрабатываю PDF статью...")
+    
+    try:
+        # Скачиваем файл
+        bot = message.bot
+        file = await bot.get_file(document.file_id)
+        file_content = await bot.download_file(file.file_path)
+        
+        # Создаем временный файл
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            temp_file.write(file_content.read())
+            temp_path = temp_file.name
+        
+        # Обрабатываем документ через RAG
+        rag_service = RAGService()
+        result = rag_service.process_document(temp_path, user_id)
+        
+        if result['success']:
+            # Сохраняем в базу данных
+            metadata = result['metadata']
+            doc_id = db.add_document(
+                title=metadata.get('title', Path(file_name).stem),
+                content_preview=result['content_preview'],
+                file_type='pdf',
+                user_id=user_id,
+                file_size=document.file_size,
+                metadata=metadata,
+                arxiv_id=metadata.get('arxiv_id'),
+                authors=metadata.get('authors')
+            )
+            
+            # Удаляем временный файл
+            os.unlink(temp_path)
+            
+            # Формируем ответ
+            title = metadata.get('title', Path(file_name).stem)
+            authors = metadata.get('authors', '')
+            arxiv_id = metadata.get('arxiv_id', '')
+            
+            success_text = f"✅ **Статья загружена успешно!**\n\n"
+            success_text += f"📄 **{title}**\n"
+            if authors:
+                success_text += f"👥 Авторы: {authors}\n"
+            if arxiv_id:
+                success_text += f"🔗 ArXiv ID: {arxiv_id}\n"
+            success_text += f"📊 Страниц: {result['pages']}\n"
+            success_text += f"📝 Чанков: {result['chunks_count']}\n\n"
+            success_text += "💬 **Теперь можете задавать вопросы по статье!**\n\n"
+            success_text += "💡 **Примеры вопросов:**\n"
+            success_text += "• Что такое основная идея статьи?\n"
+            success_text += "• Какие эксперименты проводились?\n"
+            success_text += "• Какие результаты получены?\n"
+            success_text += "• Как работает предложенный метод?"
+            
+            await processing_msg.edit_text(success_text, parse_mode="Markdown")
+            
+        else:
+            # Удаляем временный файл
+            os.unlink(temp_path)
+            
+            await processing_msg.edit_text(
+                f"❌ **Ошибка обработки PDF:**\n\n{result['error']}\n\n"
+                "Попробуйте отправить другой файл или обратитесь к администратору.",
+                parse_mode="Markdown"
+            )
+        
+    except Exception as e:
+        logger.error(f"Ошибка обработки PDF: {e}")
+        await processing_msg.edit_text(
+            "❌ Произошла ошибка при обработке PDF файла.\n\n"
+            "Попробуйте отправить файл еще раз."
+        )
+        
+        # Удаляем временный файл если он существует
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+async def get_rag_response(query: str, user_id: int, dialog_history: list) -> str:
+    """Получение ответа через RAG (простая интеграция)"""
+    try:
+        # Инициализируем RAG сервис
+        rag_service = RAGService()
+        
+        # Ищем ответ в документе
+        rag_result = rag_service.search_and_answer(query, user_id)
+        
+        if rag_result['found'] and rag_result['quality'] in ['high', 'medium']:
+            # Нашли хороший ответ в документе
+            response = rag_result['message']
+            
+            # Добавляем источники если есть
+            if 'sources' in rag_result and rag_result['sources']:
+                sources_text = "\n".join(rag_result['sources'])
+                response += f"\n\n📚 **Источники:**\n{sources_text}"
+            
+            logger.info(f"RAG ответ для пользователя {user_id}: качество {rag_result['quality']}")
+            return response
+        
+        else:
+            # Не нашли в документе - используем обычный LLM
+            logger.info(f"RAG не нашел ответ для пользователя {user_id}, используем обычный LLM")
+            return await get_llm_response(dialog_history)
+            
+    except Exception as e:
+        logger.error(f"Ошибка RAG для пользователя {user_id}: {e}")
+        # При ошибке используем обычный LLM
+        return await get_llm_response(dialog_history)
+
+
 def register_handlers(dp: Dispatcher):
     """
     Регистрация всех обработчиков сообщений в диспетчере
@@ -1406,6 +1587,10 @@ def register_handlers(dp: Dispatcher):
     
     # Обработчик команды /clear - очистка прогресса курсов
     dp.message.register(handle_clear, Command("clear"))
+    
+    # RAG обработчики (KISS принцип)
+    dp.message.register(handle_upload, Command("upload"))
+    dp.message.register(handle_pdf_file, F.document)
     
     # Обработчик неизвестных команд (команды, начинающиеся с /, но не зарегистрированные)
     dp.message.register(handle_unknown_command, F.text.startswith("/"))

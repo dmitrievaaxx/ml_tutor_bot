@@ -36,6 +36,7 @@ async def setup_bot_commands(bot: Bot):
         BotCommand(command="learn", description="📚 Выбрать курс"),
         BotCommand(command="level", description="📊 Сменить уровень знаний"),
         BotCommand(command="status", description="ℹ️ Показать текущий уровень"),
+        BotCommand(command="upload", description="📄 Загрузить PDF статью"),
         BotCommand(command="clear", description="🗑️ Очистить прогресс курсов"),
         BotCommand(command="help", description="❓ Справка по командам"),
     ]

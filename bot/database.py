@@ -125,6 +125,33 @@ class Database:
             )
         """)
         
+        # RAG Documents table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content_preview TEXT,
+                file_type TEXT NOT NULL,
+                file_size INTEGER,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                user_id INTEGER NOT NULL,
+                metadata TEXT,
+                arxiv_id TEXT,
+                authors TEXT,
+                status TEXT DEFAULT 'processing'
+            )
+        """)
+        
+        # User documents relationship table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_documents (
+                user_id INTEGER NOT NULL,
+                document_id INTEGER NOT NULL,
+                PRIMARY KEY (user_id, document_id),
+                FOREIGN KEY (document_id) REFERENCES documents (id)
+            )
+        """)
+        
         conn.commit()
         conn.close()
     
@@ -432,3 +459,85 @@ class Database:
         conn.close()
         
         logger.info(f"Очищен весь прогресс пользователя {user_id}")
+    
+    # RAG Document methods
+    def add_document(self, title: str, content_preview: str, file_type: str, user_id: int, 
+                    file_size: int = None, metadata: dict = None, arxiv_id: str = None, 
+                    authors: str = None) -> int:
+        """Add a new document and return its ID (KISS: replaces old document)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Удаляем старый документ пользователя (KISS принцип)
+        cursor.execute("DELETE FROM user_documents WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM documents WHERE user_id = ?", (user_id,))
+        
+        metadata_json = json.dumps(metadata) if metadata else None
+        
+        cursor.execute("""
+            INSERT INTO documents (title, content_preview, file_type, file_size, 
+                                 user_id, metadata, arxiv_id, authors, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'processed')
+        """, (title, content_preview, file_type, file_size, user_id, 
+              metadata_json, arxiv_id, authors))
+        
+        doc_id = cursor.lastrowid
+        
+        # Link document to user
+        cursor.execute("""
+            INSERT INTO user_documents (user_id, document_id)
+            VALUES (?, ?)
+        """, (user_id, doc_id))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Добавлен документ {title} для пользователя {user_id} (заменил старый)")
+        return doc_id
+    
+    def get_user_document(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get current document for a user (KISS: only one document per user)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT d.id, d.title, d.content_preview, d.file_type, d.file_size,
+                   d.uploaded_at, d.metadata, d.arxiv_id, d.authors, d.status
+            FROM documents d
+            JOIN user_documents ud ON d.id = ud.document_id
+            WHERE ud.user_id = ?
+            ORDER BY d.uploaded_at DESC
+            LIMIT 1
+        """, (user_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'id': row[0],
+                'title': row[1],
+                'content_preview': row[2],
+                'file_type': row[3],
+                'file_size': row[4],
+                'uploaded_at': datetime.fromisoformat(row[5]) if row[5] else None,
+                'metadata': json.loads(row[6]) if row[6] else {},
+                'arxiv_id': row[7],
+                'authors': row[8],
+                'status': row[9]
+            }
+        return None
+    
+    def has_user_documents(self, user_id: int) -> bool:
+        """Check if user has any documents"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM user_documents WHERE user_id = ?
+        """, (user_id,))
+        
+        count = cursor.fetchone()[0]
+        conn.close()
+        
+        return count > 0
