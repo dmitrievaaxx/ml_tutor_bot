@@ -143,6 +143,10 @@ async def handle_learn(message: Message):
             InlineKeyboardButton(text=f"📚 {course.name}", callback_data=f"course_{course.id}")
         ])
     
+    # Добавляем кнопку "Вернуться в главное меню"
+    keyboard_buttons.append([
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
+    ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     
