@@ -468,9 +468,7 @@ async def handle_level_selection(callback_query: CallbackQuery):
         welcome_message = get_welcome_message(level)
         
         # Отправляем сообщение с подтверждением и приветствием
-        level_emoji = "🟢" if level == "Новичок" else "🟡" if level == "Базовый" else "🔴"
         await callback_query.message.edit_text(
-            f"✅ Уровень установлен: {level} {level_emoji}\n\n"
             f"{welcome_message}\n\n"
             "Теперь я буду адаптировать ответы под ваш уровень знаний. Задавайте любые вопросы!\n\n"
             "💡 Используйте команду /level для смены уровня.",
