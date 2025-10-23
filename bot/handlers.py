@@ -235,11 +235,6 @@ async def handle_status(message: Message):
             status_text += f"{course_info}\n"
         status_text += "\n"
     
-    status_text += f"📈 **Статистика:**\n"
-    status_text += f"• Успешных тестов: {progress_stats.get('successful_tests', 0)}\n"
-    status_text += f"• Ошибок в тестах: {progress_stats.get('test_errors', 0)}\n"
-    status_text += f"• Время обучения: {progress_stats.get('learning_time', '0 мин')}\n"
-    
     await message.answer(status_text, parse_mode="Markdown")
 
 
