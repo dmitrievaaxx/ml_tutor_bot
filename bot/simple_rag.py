@@ -105,10 +105,19 @@ class SimpleRAG:
             logger.info(f"Создано {len(all_splits)} чанков")
             
             # 3. Создание векторного хранилища (как в notebook)
-            self.vector_store = InMemoryVectorStore.from_documents(
-                all_splits,
-                embedding=self.embeddings
-            )
+            logger.info("Создаю векторное хранилище...")
+            
+            # Создаем пустое векторное хранилище
+            self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
+            
+            # Добавляем документы по одному
+            for i, chunk in enumerate(all_splits):
+                try:
+                    self.vector_store.add_documents([chunk])
+                    logger.info(f"Добавлен чанк {i+1}/{len(all_splits)}")
+                except Exception as e:
+                    logger.error(f"Ошибка добавления чанка {i+1}: {e}")
+                    continue
             
             # 4. Создание retriever (как в notebook)
             self.retriever = self.vector_store.as_retriever(
