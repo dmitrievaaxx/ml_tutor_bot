@@ -3,10 +3,13 @@ Database models and initialization for ML Tutor Bot
 """
 import sqlite3
 import json
+import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
