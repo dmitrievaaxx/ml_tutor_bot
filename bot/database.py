@@ -410,3 +410,22 @@ class Database:
             )
         
         return course_id
+    
+    def clear_user_progress(self, user_id: int):
+        """Clear all progress for a user (all courses)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Delete user progress for all courses
+        cursor.execute("DELETE FROM user_progress WHERE user_id = ?", (user_id,))
+        
+        # Delete lesson completions
+        cursor.execute("DELETE FROM lesson_completions WHERE user_id = ?", (user_id,))
+        
+        # Delete test errors
+        cursor.execute("DELETE FROM test_errors WHERE user_id = ?", (user_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Очищен весь прогресс пользователя {user_id}")
