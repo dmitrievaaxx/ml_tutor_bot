@@ -540,7 +540,7 @@ async def handle_message(message: Message):
         default_level = get_user_level_or_default(chat_id)
         await message.answer(
             f"🟡 Уровень по умолчанию: **{default_level}**\n\n"
-            f"Я буду отвечать на базовом уровне. Используйте команду /level для смены уровня.\n\n",
+            f"Используйте команду /level для смены уровня.\n\n",
             parse_mode="Markdown"
         )
     
