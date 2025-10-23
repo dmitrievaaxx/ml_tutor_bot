@@ -252,29 +252,160 @@ Context:
                 'arxiv_id': ''
             }
     
-    def answer_question(self, question: str) -> str:
+    def answer_question(self, question: str) -> Dict[str, Any]:
         """
-        Ответ на вопрос через RAG (как в notebook)
+        Ответ на вопрос через RAG с анализом качества
         
         Args:
             question: Вопрос пользователя
             
         Returns:
-            Ответ на основе документа
+            Словарь с ответом и метаданными
         """
         try:
             if not self.rag_chain:
-                return "RAG система не инициализирована. Сначала загрузите документ."
+                return {
+                    'answer': "RAG система не инициализирована. Сначала загрузите документ.",
+                    'source': 'error',
+                    'quality': 'low'
+                }
+            
+            # Получаем релевантные чанки для анализа
+            relevant_chunks = self.retriever.invoke(question)
             
             # Используем RAG цепочку (как в notebook)
             answer = self.rag_chain.invoke(question)
             
-            logger.info(f"RAG ответ на вопрос: {question[:50]}...")
-            return answer
+            # Анализируем качество ответа
+            quality = self._analyze_answer_quality(question, answer, relevant_chunks)
+            
+            # Определяем источник ответа
+            source = self._determine_answer_source(quality, relevant_chunks)
+            
+            logger.info(f"RAG ответ на вопрос: {question[:50]}... (качество: {quality})")
+            
+            return {
+                'answer': answer,
+                'source': source,
+                'quality': quality,
+                'chunks_used': len(relevant_chunks)
+            }
             
         except Exception as e:
             logger.error(f"Ошибка получения ответа: {e}")
-            return f"Ошибка при получении ответа: {str(e)}"
+            return {
+                'answer': f"Ошибка при получении ответа: {str(e)}",
+                'source': 'error',
+                'quality': 'low'
+            }
+    
+    def _analyze_answer_quality(self, question: str, answer: str, chunks: List) -> str:
+        """Анализ качества ответа"""
+        try:
+            # Простой анализ качества на основе ключевых слов
+            question_lower = question.lower()
+            answer_lower = answer.lower()
+            
+            # Проверяем, содержит ли ответ ключевые слова из вопроса
+            question_words = set(question_lower.split())
+            answer_words = set(answer_lower.split())
+            
+            # Подсчитываем пересечение слов
+            common_words = question_words.intersection(answer_words)
+            overlap_ratio = len(common_words) / len(question_words) if question_words else 0
+            
+            # Проверяем наличие информации в чанках
+            chunks_content = " ".join([chunk.page_content.lower() for chunk in chunks])
+            chunks_words = set(chunks_content.split())
+            chunks_overlap = question_words.intersection(chunks_words)
+            chunks_ratio = len(chunks_overlap) / len(question_words) if question_words else 0
+            
+            # Определяем качество
+            if overlap_ratio > 0.3 and chunks_ratio > 0.2:
+                return 'high'
+            elif overlap_ratio > 0.1 and chunks_ratio > 0.1:
+                return 'medium'
+            else:
+                return 'low'
+                
+        except Exception as e:
+            logger.error(f"Ошибка анализа качества: {e}")
+            return 'low'
+    
+    def _determine_answer_source(self, quality: str, chunks: List) -> str:
+        """Определение источника ответа"""
+        if quality == 'high':
+            return 'document'
+        elif quality == 'medium':
+            return 'document_partial'
+        else:
+            return 'not_found'
+    
+    def extract_document_topics(self) -> List[str]:
+        """Извлечение ключевых тем из документа"""
+        try:
+            if not self.vector_store:
+                return []
+            
+            # Получаем все документы из хранилища через поиск
+            # InMemoryVectorStore не имеет get_all_documents(), используем поиск
+            all_docs = self.vector_store.similarity_search("", k=1000)  # Получаем все документы
+            
+            if not all_docs:
+                return []
+            
+            # Объединяем текст всех документов
+            full_text = " ".join([doc.page_content for doc in all_docs])
+            
+            # Простое извлечение тем на основе ключевых слов
+            topics = self._extract_topics_from_text(full_text)
+            
+            logger.info(f"Извлечено {len(topics)} тем из документа")
+            return topics
+            
+        except Exception as e:
+            logger.error(f"Ошибка извлечения тем: {e}")
+            return []
+    
+    def _extract_topics_from_text(self, text: str) -> List[str]:
+        """Извлечение тем из текста"""
+        try:
+            import re
+            
+            # Ищем заголовки и ключевые фразы
+            topics = []
+            
+            # Паттерны для поиска тем
+            patterns = [
+                r'## (.+)',  # Markdown заголовки
+                r'# (.+)',   # Markdown заголовки
+                r'Abstract[:\s]*(.+)',  # Abstract
+                r'Introduction[:\s]*(.+)',  # Introduction
+                r'Method[:\s]*(.+)',  # Method
+                r'Result[:\s]*(.+)',  # Results
+                r'Conclusion[:\s]*(.+)',  # Conclusion
+            ]
+            
+            for pattern in patterns:
+                matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
+                for match in matches:
+                    topic = match.strip()[:100]  # Ограничиваем длину
+                    if len(topic) > 10 and topic not in topics:
+                        topics.append(topic)
+            
+            # Если не нашли тем, создаем общие
+            if not topics:
+                topics = [
+                    "Основная идея статьи",
+                    "Методы и подходы", 
+                    "Результаты и выводы"
+                ]
+            
+            return topics[:3]  # Возвращаем максимум 3 темы
+            
+        except Exception as e:
+            logger.error(f"Ошибка извлечения тем из текста: {e}")
+            return ["Основная идея статьи", "Методы и подходы", "Результаты и выводы"]
     
     def has_document(self) -> bool:
         """Проверка наличия загруженного документа"""
