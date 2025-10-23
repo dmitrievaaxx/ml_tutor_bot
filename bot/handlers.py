@@ -1492,12 +1492,17 @@ async def handle_pdf_file(message: Message):
             authors = metadata.get('authors', '')
             arxiv_id = metadata.get('arxiv_id', '')
             
+            # Экранируем специальные символы Markdown
+            safe_title = title.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace('`', '\\`')
+            safe_authors = authors.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace('`', '\\`')
+            safe_arxiv_id = arxiv_id.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace('`', '\\`')
+            
             success_text = f"✅ **Статья загружена успешно!**\n\n"
-            success_text += f"📄 **{title}**\n"
+            success_text += f"📄 **{safe_title}**\n"
             if authors:
-                success_text += f"👥 Авторы: {authors}\n"
+                success_text += f"👥 Авторы: {safe_authors}\n"
             if arxiv_id:
-                success_text += f"🔗 ArXiv ID: {arxiv_id}\n"
+                success_text += f"🔗 ArXiv ID: {safe_arxiv_id}\n"
             success_text += f"📊 Страниц: {result['pages']}\n"
             success_text += f"📝 Чанков: {result['chunks_count']}\n\n"
             success_text += "💬 **Теперь можете задавать вопросы по статье!**\n\n"
@@ -1506,7 +1511,9 @@ async def handle_pdf_file(message: Message):
             if topics:
                 success_text += "🎯 **Предлагаемые темы для обсуждения:**\n"
                 for i, topic in enumerate(topics, 1):
-                    success_text += f"{i}. {topic}\n"
+                    # Экранируем специальные символы Markdown
+                    safe_topic = topic.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace('`', '\\`')
+                    success_text += f"{i}. {safe_topic}\n"
                 success_text += "\n"
             
             success_text += "💡 **Или задайте свой вопрос!**"
@@ -1545,26 +1552,47 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
             logger.info(f"У пользователя {user_id} нет документа, используем обычный LLM")
             return await get_llm_response(dialog_history)
         
-        # Создаем RAG систему
+        # Проверяем, есть ли файл документа
+        # Пока что используем упрощенный подход - создаем RAG систему с контекстом документа
         rag_system = SimpleRAG()
         
-        # Получаем ответ через RAG с анализом качества
-        rag_result = rag_system.answer_question(query)
+        # Для простоты используем обычный LLM с контекстом документа
+        document_text = user_doc.get('content_preview', '')
         
-        # Формируем ответ в зависимости от источника
-        if rag_result['source'] == 'document':
-            response = f"📄 **Ответ на основе документа:**\n\n{rag_result['answer']}"
-        elif rag_result['source'] == 'document_partial':
-            response = f"📄 **Ответ на основе документа (частично):**\n\n{rag_result['answer']}"
-        elif rag_result['source'] == 'not_found':
-            response = f"❌ **В документе нет информации об этом.**\n\n{rag_result['answer']}"
-        else:
-            response = rag_result['answer']
+        if not document_text:
+            logger.info(f"У документа пользователя {user_id} нет текста, используем обычный LLM")
+            return await get_llm_response(dialog_history)
+        
+        # Формируем промпт с контекстом документа
+        enhanced_dialog = dialog_history.copy()
+        
+        # Добавляем системное сообщение с контекстом
+        system_message = {
+            "role": "system",
+            "content": f"""Ты помощник по машинному обучению. Пользователь задает вопрос по загруженному PDF документу.
+
+КОНТЕКСТ ДОКУМЕНТА:
+{document_text}
+
+ИНСТРУКЦИИ:
+- Отвечай на русском языке
+- Используй информацию из контекста документа
+- Если в контексте нет ответа, скажи об этом
+- Укажи, что ответ основан на загруженном документе"""
+        }
+        
+        # Вставляем системное сообщение в начало диалога
+        enhanced_dialog.insert(0, system_message)
+        
+        # Получаем ответ от LLM
+        response = await get_llm_response(enhanced_dialog)
         
         # Добавляем информацию об источнике
-        response += f"\n\n📄 **Источник:** {user_doc.get('title', 'Загруженный документ')}"
+        if response:
+            response = f"📄 **Ответ на основе документа:**\n\n{response}"
+            response += f"\n\n📄 **Источник:** {user_doc.get('title', 'Загруженный документ')}"
         
-        logger.info(f"RAG ответ для пользователя {user_id} (источник: {rag_result['source']})")
+        logger.info(f"RAG ответ для пользователя {user_id}")
         return response
         
     except Exception as e:

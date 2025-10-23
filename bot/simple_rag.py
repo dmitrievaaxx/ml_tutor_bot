@@ -110,14 +110,25 @@ class SimpleRAG:
             # Создаем пустое векторное хранилище
             self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
             
-            # Добавляем документы по одному
-            for i, chunk in enumerate(all_splits):
+            # Добавляем документы батчами для лучшей производительности
+            batch_size = 10
+            for i in range(0, len(all_splits), batch_size):
+                batch = all_splits[i:i + batch_size]
                 try:
-                    self.vector_store.add_documents([chunk])
-                    logger.info(f"Добавлен чанк {i+1}/{len(all_splits)}")
+                    # Используем add_texts вместо add_documents для совместимости
+                    texts = [doc.page_content for doc in batch]
+                    metadatas = [doc.metadata for doc in batch]
+                    self.vector_store.add_texts(texts, metadatas)
+                    logger.info(f"Добавлен батч чанков {i//batch_size + 1}/{(len(all_splits) + batch_size - 1)//batch_size}")
                 except Exception as e:
-                    logger.error(f"Ошибка добавления чанка {i+1}: {e}")
-                    continue
+                    logger.error(f"Ошибка добавления батча {i//batch_size + 1}: {e}")
+                    # Пробуем добавить по одному как fallback
+                    for j, chunk in enumerate(batch):
+                        try:
+                            self.vector_store.add_texts([chunk.page_content], [chunk.metadata])
+                        except Exception as e2:
+                            logger.error(f"Ошибка добавления чанка {i+j+1}: {e2}")
+                            continue
             
             # 4. Создание retriever (как в notebook)
             self.retriever = self.vector_store.as_retriever(
