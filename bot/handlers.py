@@ -16,7 +16,7 @@ from bot.progress import get_user_progress, mark_topic_completed
 from llm.client import get_llm_response, get_llm_response_for_test
 from bot.database import Database
 from bot.test_prompts import TEST_GENERATION_PROMPT
-from bot.rag import RAGService
+from bot.simple_rag import SimpleRAG
 import tempfile
 import os
 from pathlib import Path
@@ -1463,9 +1463,9 @@ async def handle_pdf_file(message: Message):
             temp_file.write(file_content.read())
             temp_path = temp_file.name
         
-        # Обрабатываем документ через RAG
-        rag_service = RAGService()
-        result = rag_service.process_document(temp_path, user_id)
+        # Обрабатываем документ через простую RAG систему
+        rag_system = SimpleRAG()
+        result = rag_system.process_pdf(temp_path)
         
         if result['success']:
             # Сохраняем в базу данных
@@ -1529,31 +1529,57 @@ async def handle_pdf_file(message: Message):
 
 
 async def get_rag_response(query: str, user_id: int, dialog_history: list) -> str:
-    """Получение ответа через RAG (простая интеграция)"""
+    """Получение ответа через простую RAG систему (как в notebook)"""
     try:
-        # Инициализируем RAG сервис
-        rag_service = RAGService()
+        # Получаем документ пользователя
+        user_doc = db.get_user_document(user_id)
         
-        # Ищем ответ в документе
-        rag_result = rag_service.search_and_answer(query, user_id)
-        
-        if rag_result['found'] and rag_result['quality'] in ['high', 'medium']:
-            # Нашли хороший ответ в документе
-            response = rag_result['message']
-            
-            # Добавляем источники если есть
-            if 'sources' in rag_result and rag_result['sources']:
-                sources_text = "\n".join(rag_result['sources'])
-                response += f"\n\n📚 **Источники:**\n{sources_text}"
-            
-            logger.info(f"RAG ответ для пользователя {user_id}: качество {rag_result['quality']}")
-            return response
-        
-        else:
-            # Не нашли в документе - используем обычный LLM
-            logger.info(f"RAG не нашел ответ для пользователя {user_id}, используем обычный LLM")
+        if not user_doc:
+            logger.info(f"У пользователя {user_id} нет документа, используем обычный LLM")
             return await get_llm_response(dialog_history)
-            
+        
+        # Создаем RAG систему
+        rag_system = SimpleRAG()
+        
+        # Для простоты используем обычный LLM с контекстом документа
+        # В реальной системе нужно было бы сохранять полный текст и векторное хранилище
+        document_text = user_doc.get('content_preview', '')
+        
+        if not document_text:
+            logger.info(f"У документа пользователя {user_id} нет текста, используем обычный LLM")
+            return await get_llm_response(dialog_history)
+        
+        # Формируем промпт с контекстом документа
+        enhanced_dialog = dialog_history.copy()
+        
+        # Добавляем системное сообщение с контекстом
+        system_message = {
+            "role": "system",
+            "content": f"""Ты помощник по машинному обучению. Пользователь задает вопрос по загруженному PDF документу.
+
+КОНТЕКСТ ДОКУМЕНТА:
+{document_text}
+
+ИНСТРУКЦИИ:
+- Отвечай на русском языке
+- Используй информацию из контекста документа
+- Если в контексте нет ответа, скажи об этом
+- Укажи, что ответ основан на загруженном документе"""
+        }
+        
+        # Вставляем системное сообщение в начало диалога
+        enhanced_dialog.insert(0, system_message)
+        
+        # Получаем ответ от LLM
+        response = await get_llm_response(enhanced_dialog)
+        
+        # Добавляем информацию об источнике
+        if response:
+            response += f"\n\n📄 **Источник:** {user_doc.get('title', 'Загруженный документ')}"
+        
+        logger.info(f"RAG ответ для пользователя {user_id}")
+        return response
+        
     except Exception as e:
         logger.error(f"Ошибка RAG для пользователя {user_id}: {e}")
         # При ошибке используем обычный LLM
