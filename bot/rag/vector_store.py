@@ -38,10 +38,10 @@ class VectorStore:
             # Создаем директорию для данных
             os.makedirs(self.persist_directory, exist_ok=True)
             
-            # Инициализируем модель эмбеддингов
+            # Инициализируем модель эмбеддингов (легкая модель)
             logger.info("Загружаю модель эмбеддингов...")
             self.embeddings_model = SentenceTransformer(
-                'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+                'sentence-transformers/all-MiniLM-L6-v2'
             )
             
             # Инициализируем ChromaDB

@@ -1,47 +1,45 @@
-# Git
-.git
-.gitignore
-
-# Environment
-.env
-.env.example
-.venv
-venv/
-
-# Python
+# Исключаем ненужные файлы из Docker образа
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
-
-# Testing
+*.so
+.git/
+.gitignore
+README.md
+*.md
+.env
+.env.local
+.env.*.local
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .pytest_cache/
 .coverage
 htmlcov/
-
-# Documentation
-doc/
-*.md
-!README.md
-
-# Build
-build/
-dist/
-*.egg-info/
-
-# IDE
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Logs
+*~
+.DS_Store
+Thumbs.db
+chroma_db/
+*.db
+*.sqlite
+*.sqlite3
+tests/
+doc/
 *.log
-
-# Lock files
 uv.lock
-
-# Makefile
-Makefile
-

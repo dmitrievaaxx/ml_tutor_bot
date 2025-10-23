@@ -1,30 +1,43 @@
-# Используем официальный образ Python 3.11 slim для минимального размера
-FROM python:3.11-slim
+# Многоэтапная сборка для уменьшения размера образа
+FROM python:3.11-slim as builder
+
+# Устанавливаем системные зависимости для сборки
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем системные зависимости для оптимизации
+# Копируем файлы конфигурации
+COPY pyproject.toml ./
+
+# Устанавливаем зависимости в виртуальное окружение
+RUN pip install --no-cache-dir uv && \
+    uv pip install --system --no-cache .
+
+# Финальный образ
+FROM python:3.11-slim
+
+# Устанавливаем только необходимые системные зависимости
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Копируем файлы конфигурации и исходный код
-COPY pyproject.toml ./
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Копируем установленные пакеты из builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Копируем исходный код
 COPY bot/ ./bot/
 COPY llm/ ./llm/
 COPY data/ ./data/
 
-# Устанавливаем uv и зависимости проекта с оптимизацией
-RUN pip install --no-cache-dir uv && \
-    uv pip install --system --no-cache . && \
-    # Удаляем кэш pip для уменьшения размера
-    pip cache purge && \
-    # Удаляем временные файлы
-    find /usr/local -name "*.pyc" -delete && \
-    find /usr/local -name "__pycache__" -delete
-
-# Создаем непривилегированного пользователя для безопасности
+# Создаем непривилегированного пользователя
 RUN useradd -m -u 1000 botuser && \
     chown -R botuser:botuser /app
 

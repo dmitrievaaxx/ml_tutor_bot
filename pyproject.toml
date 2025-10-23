@@ -8,13 +8,11 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "openai>=1.0.0",
     "requests>=2.31.0",
-    # RAG зависимости
-    "langchain>=0.1.0",
-    "langchain-openai>=0.1.0",
-    "langchain-community>=0.0.20",
+    # RAG зависимости (оптимизированные)
     "chromadb>=0.4.0",
     "sentence-transformers>=2.2.0",
     "PyPDF2>=3.0.0",
+    "numpy>=1.21.0",
 ]
 
 [project.optional-dependencies]
