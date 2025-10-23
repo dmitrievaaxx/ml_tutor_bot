@@ -47,18 +47,22 @@ class SimpleRAG:
     def _initialize_components(self):
         """Инициализация компонентов RAG"""
         try:
-            # Инициализируем LLM (используем OpenAI)
+            # Инициализируем LLM (используем OpenRouter вместо OpenAI)
             self.llm = ChatOpenAI(
-                model="gpt-4o-mini", 
-                temperature=0.9
+                model="meta-llama/llama-3.3-70b-instruct:free", 
+                temperature=0.9,
+                openai_api_base="https://openrouter.ai/api/v1",
+                openai_api_key=os.getenv("OPENROUTER_API_KEY")
             )
             
-            # Инициализируем эмбеддинги
+            # Инициализируем эмбеддинги (используем OpenRouter)
             self.embeddings = OpenAIEmbeddings(
-                model="text-embedding-3-large"
+                model="text-embedding-3-large",
+                openai_api_base="https://openrouter.ai/api/v1",
+                openai_api_key=os.getenv("OPENROUTER_API_KEY")
             )
             
-            logger.info("RAG компоненты инициализированы")
+            logger.info("RAG компоненты инициализированы с OpenRouter")
             
         except Exception as e:
             logger.error(f"Ошибка инициализации RAG: {e}")
