@@ -311,7 +311,14 @@ async def handle_help(message: Message):
 • `/help` - Показать эту справку
 """
     
-    await message.answer(help_text, parse_mode="Markdown")
+    # Создаем клавиатуру с кнопкой возврата в главное меню
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
+        ]
+    ])
+    
+    await message.answer(help_text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 async def handle_exit(message: Message):
