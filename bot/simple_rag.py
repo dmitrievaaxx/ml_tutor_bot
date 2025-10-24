@@ -122,25 +122,15 @@ class SimpleRAG:
             # Создаем пустое векторное хранилище
             self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
             
-            # Добавляем документы батчами для лучшей производительности
-            batch_size = 10
-            for i in range(0, len(all_splits), batch_size):
-                batch = all_splits[i:i + batch_size]
+            # Добавляем документы по одному для стабильности
+            for i, chunk in enumerate(all_splits):
                 try:
-                    # Используем add_texts вместо add_documents для совместимости
-                    texts = [doc.page_content for doc in batch]
-                    metadatas = [doc.metadata for doc in batch]
-                    self.vector_store.add_texts(texts, metadatas)
-                    logger.info(f"Добавлен батч чанков {i//batch_size + 1}/{(len(all_splits) + batch_size - 1)//batch_size}")
+                    # Используем add_texts с правильными параметрами
+                    self.vector_store.add_texts([chunk.page_content], [chunk.metadata])
+                    logger.info(f"Добавлен чанк {i+1}/{len(all_splits)}")
                 except Exception as e:
-                    logger.error(f"Ошибка добавления батча {i//batch_size + 1}: {e}")
-                    # Пробуем добавить по одному как fallback
-                    for j, chunk in enumerate(batch):
-                        try:
-                            self.vector_store.add_texts([chunk.page_content], [chunk.metadata])
-                        except Exception as e2:
-                            logger.error(f"Ошибка добавления чанка {i+j+1}: {e2}")
-                            continue
+                    logger.error(f"Ошибка добавления чанка {i+1}: {e}")
+                    continue
             
             # 4. Создание retriever (как в notebook)
             self.retriever = self.vector_store.as_retriever(
@@ -503,14 +493,20 @@ Context retrieved for the last question:
         """Извлечение ключевых тем из документа"""
         try:
             if not self.vector_store:
-                return []
+                logger.warning("Векторное хранилище не инициализировано")
+                return ["Основная идея статьи", "Методы и подходы", "Результаты и выводы"]
             
             # Получаем все документы из хранилища через поиск
             # InMemoryVectorStore не имеет get_all_documents(), используем поиск
-            all_docs = self.vector_store.similarity_search("", k=1000)  # Получаем все документы
+            try:
+                all_docs = self.vector_store.similarity_search("", k=1000)  # Получаем все документы
+            except Exception as e:
+                logger.error(f"Ошибка поиска в векторном хранилище: {e}")
+                return ["Основная идея статьи", "Методы и подходы", "Результаты и выводы"]
             
             if not all_docs:
-                return []
+                logger.warning("Не найдено документов в векторном хранилище")
+                return ["Основная идея статьи", "Методы и подходы", "Результаты и выводы"]
             
             # Объединяем текст всех документов
             full_text = " ".join([doc.page_content for doc in all_docs])
@@ -523,7 +519,7 @@ Context retrieved for the last question:
             
         except Exception as e:
             logger.error(f"Ошибка извлечения тем: {e}")
-            return []
+            return ["Основная идея статьи", "Методы и подходы", "Результаты и выводы"]
     
     def _extract_topics_from_text(self, text: str) -> List[str]:
         """Извлечение тем из текста"""
@@ -564,6 +560,10 @@ Context retrieved for the last question:
         except Exception as e:
             logger.error(f"Ошибка извлечения тем из текста: {e}")
             return ["Основная идея статьи", "Методы и подходы", "Результаты и выводы"]
+    
+    def _create_empty_vector_store(self):
+        """Создание пустого векторного хранилища"""
+        return InMemoryVectorStore(embedding=self.embeddings)
     
     def has_document(self) -> bool:
         """Проверка наличия загруженного документа"""

@@ -1642,11 +1642,59 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
         
         try:
             # Обрабатываем документ через RAG систему
-            result = rag_system.process_pdf(temp_path)
-            
-            if not result['success']:
-                logger.error(f"Ошибка обработки документа для RAG: {result['error']}")
-                return await get_llm_response(dialog_history)
+            # Проверяем, что это действительно PDF файл
+            if temp_path.endswith('.txt'):
+                # Для текстовых файлов используем простой подход
+                logger.info("Обрабатываю текстовый файл как документ")
+                
+                # Создаем простую RAG систему без PDF парсинга
+                rag_system = SimpleRAG()
+                
+                # Создаем временный PDF файл с содержимым
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pdf') as pdf_temp:
+                    # Записываем содержимое как простой текст
+                    pdf_temp.write(document_text)
+                    pdf_temp_path = pdf_temp.name
+                
+                try:
+                    # Используем простой подход - создаем векторное хранилище напрямую
+                    from langchain_text_splitters import RecursiveCharacterTextSplitter
+                    from langchain_core.documents import Document
+                    
+                    # Создаем документ из текста
+                    doc = Document(page_content=document_text, metadata={"source": "uploaded_text"})
+                    
+                    # Разбиваем на чанки
+                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
+                    chunks = text_splitter.split_documents([doc])
+                    
+                    # Создаем векторное хранилище
+                    rag_system.vector_store = rag_system.vector_store or rag_system._create_empty_vector_store()
+                    
+                    # Добавляем чанки
+                    for chunk in chunks:
+                        try:
+                            rag_system.vector_store.add_texts([chunk.page_content], [chunk.metadata])
+                        except Exception as e:
+                            logger.error(f"Ошибка добавления чанка: {e}")
+                            continue
+                    
+                    # Создаем retriever
+                    rag_system.retriever = rag_system.vector_store.as_retriever(search_kwargs={'k': 3})
+                    
+                    # Создаем RAG цепочки
+                    rag_system._create_rag_chains()
+                    
+                finally:
+                    if os.path.exists(pdf_temp_path):
+                        os.unlink(pdf_temp_path)
+            else:
+                # Для PDF файлов используем обычную обработку
+                result = rag_system.process_pdf(temp_path)
+                
+                if not result['success']:
+                    logger.error(f"Ошибка обработки документа для RAG: {result['error']}")
+                    return await get_llm_response(dialog_history)
             
             # Используем полноценную RAG систему для ответа
             rag_result = rag_system.answer_question(query, dialog_history)
