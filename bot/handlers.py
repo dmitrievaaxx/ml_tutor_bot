@@ -111,10 +111,6 @@ async def handle_start(message: Message):
         ],
         [
             InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")
-        ],
-        [
-            InlineKeyboardButton(text="📖 Курсы", callback_data="show_courses"),
-            InlineKeyboardButton(text="📄 Загрузить PDF", callback_data="upload_pdf")
         ]
     ])
     
@@ -518,7 +514,7 @@ async def handle_course_selection(callback_query: CallbackQuery):
         
         # Создаем новое сообщение с главным меню
         await callback_query.message.answer(
-            """👋 Привет!
+            """Привет!
 Я — твой помощник по машинному обучению 🤖
 
 🎓 Возможности:
@@ -543,10 +539,6 @@ async def handle_course_selection(callback_query: CallbackQuery):
                 ],
                 [
                     InlineKeyboardButton(text="🔴 Продвинутый", callback_data="level_advanced")
-                ],
-                [
-                    InlineKeyboardButton(text="📖 Курсы", callback_data="show_courses"),
-                    InlineKeyboardButton(text="📄 Загрузить PDF", callback_data="upload_pdf")
                 ]
             ])
         )
