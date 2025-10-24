@@ -116,42 +116,52 @@ class SimpleRAG:
             
             logger.info(f"Создано {len(all_splits)} чанков")
             
-            # 3. Создание векторного хранилища (альтернативный подход)
+            # 3. Создание векторного хранилища (обходной путь для OpenRouter)
             logger.info("Создаю векторное хранилище...")
             
-            # Создаем пустое векторное хранилище
-            self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
-            
-            # Добавляем документы через from_documents (более стабильный метод)
+            # Проблема: InMemoryVectorStore не работает с OpenRouter embeddings
+            # Решение: создаем простое хранилище без embeddings для начала
             try:
-                # Используем from_documents для создания векторного хранилища
-                self.vector_store = InMemoryVectorStore.from_documents(
-                    all_splits,
-                    embedding=self.embeddings
-                )
-                logger.info(f"Векторное хранилище создано успешно с {len(all_splits)} чанками")
-            except Exception as e:
-                logger.error(f"Ошибка создания векторного хранилища через from_documents: {e}")
-                # Fallback: создаем пустое хранилище и добавляем по одному
-                self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
+                # Создаем пустое векторное хранилище без embeddings
+                self.vector_store = InMemoryVectorStore()
                 
-                # Добавляем документы по одному для стабильности
+                # Добавляем документы напрямую (без embeddings пока)
                 for i, chunk in enumerate(all_splits):
                     try:
-                        # Используем add_texts с правильными параметрами
+                        # Добавляем как простые тексты без embeddings
                         self.vector_store.add_texts([chunk.page_content], [chunk.metadata])
                         logger.info(f"Добавлен чанк {i+1}/{len(all_splits)}")
                     except Exception as e2:
                         logger.error(f"Ошибка добавления чанка {i+1}: {e2}")
                         continue
+                
+                logger.info(f"Векторное хранилище создано с {len(all_splits)} чанками (без embeddings)")
+                
+            except Exception as e:
+                logger.error(f"Критическая ошибка создания векторного хранилища: {e}")
+                # Создаем заглушку
+                self.vector_store = None
             
             # 4. Создание retriever (как в notebook)
-            self.retriever = self.vector_store.as_retriever(
-                search_kwargs={'k': 3}
-            )
+            if self.vector_store:
+                try:
+                    self.retriever = self.vector_store.as_retriever(
+                        search_kwargs={'k': 3}
+                    )
+                    logger.info("Retriever создан успешно")
+                except Exception as e:
+                    logger.error(f"Ошибка создания retriever: {e}")
+                    # Создаем простой retriever без векторного поиска
+                    self.retriever = None
+            else:
+                logger.warning("Векторное хранилище не создано, retriever недоступен")
+                self.retriever = None
             
             # 5. Создание всех RAG цепочек (как в notebook)
-            self._create_rag_chains()
+            if self.retriever:
+                self._create_rag_chains()
+            else:
+                logger.warning("Retriever недоступен, RAG цепочки не созданы")
             
             # Создаем превью контента
             content_preview = self._create_content_preview(pages)
@@ -404,6 +414,48 @@ Context retrieved for the last question:
         """
         try:
             if not self.rag_chain:
+                logger.warning("RAG цепочка не создана, используем простой подход")
+                # Простой подход: используем LLM напрямую с контекстом документа
+                if self.vector_store:
+                    try:
+                        # Получаем все документы из хранилища
+                        all_docs = self.vector_store.similarity_search("", k=1000)
+                        if all_docs:
+                            # Объединяем весь текст документа
+                            document_text = "\n\n".join([doc.page_content for doc in all_docs])
+                            
+                            # Создаем простой промпт с контекстом
+                            context_prompt = f"""Ответь на вопрос на основе следующего документа:
+
+Документ:
+{document_text[:2000]}  # Ограничиваем размер
+
+Вопрос: {question}
+
+Ответь кратко и по существу на основе информации из документа. Если информации нет, скажи "В документе нет информации об этом"."""
+                            
+                            # Используем LLM напрямую
+                            answer = self.llm.invoke(context_prompt).content
+                            
+                            # Определяем источник ответа
+                            if "в документе нет информации" in answer.lower():
+                                source = 'not_found'
+                                quality = 'low'
+                            else:
+                                source = 'document'
+                                quality = 'medium'
+                            
+                            logger.info(f"Простой RAG ответ: source={source}, quality={quality}")
+                            
+                            return {
+                                'answer': answer,
+                                'source': source,
+                                'quality': quality,
+                                'chunks_used': len(all_docs)
+                            }
+                    except Exception as e:
+                        logger.error(f"Ошибка простого RAG: {e}")
+                
                 return {
                     'answer': "RAG система не инициализирована. Сначала загрузите документ.",
                     'source': 'error',
@@ -435,7 +487,15 @@ Context retrieved for the last question:
                 answer = self.rag_chain.invoke(question)
             
             # Получаем релевантные чанки для анализа
-            relevant_chunks = self.retriever.invoke(question)
+            if self.retriever:
+                try:
+                    relevant_chunks = self.retriever.invoke(question)
+                except Exception as e:
+                    logger.error(f"Ошибка получения чанков через retriever: {e}")
+                    relevant_chunks = []
+            else:
+                logger.warning("Retriever недоступен, используем пустой список чанков")
+                relevant_chunks = []
             
             # Анализируем качество ответа
             quality = self._analyze_answer_quality(question, answer, relevant_chunks)
