@@ -512,6 +512,12 @@ async def handle_course_selection(callback_query: CallbackQuery):
         except:
             pass  # Игнорируем ошибки удаления
         
+        # Если пользователь был в режиме RAG, выходим из него
+        user_id = callback_query.from_user.id
+        if db.has_user_documents(user_id):
+            db.clear_user_documents(user_id)
+            logger.info(f"Пользователь {user_id} вышел из режима RAG через главное меню")
+        
         # Создаем новое сообщение с главным меню
         await callback_query.message.answer(
             """👋 Привет!
