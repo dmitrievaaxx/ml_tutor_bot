@@ -116,21 +116,34 @@ class SimpleRAG:
             
             logger.info(f"Создано {len(all_splits)} чанков")
             
-            # 3. Создание векторного хранилища (как в notebook)
+            # 3. Создание векторного хранилища (альтернативный подход)
             logger.info("Создаю векторное хранилище...")
             
             # Создаем пустое векторное хранилище
             self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
             
-            # Добавляем документы по одному для стабильности
-            for i, chunk in enumerate(all_splits):
-                try:
-                    # Используем add_texts с правильными параметрами
-                    self.vector_store.add_texts([chunk.page_content], [chunk.metadata])
-                    logger.info(f"Добавлен чанк {i+1}/{len(all_splits)}")
-                except Exception as e:
-                    logger.error(f"Ошибка добавления чанка {i+1}: {e}")
-                    continue
+            # Добавляем документы через from_documents (более стабильный метод)
+            try:
+                # Используем from_documents для создания векторного хранилища
+                self.vector_store = InMemoryVectorStore.from_documents(
+                    all_splits,
+                    embedding=self.embeddings
+                )
+                logger.info(f"Векторное хранилище создано успешно с {len(all_splits)} чанками")
+            except Exception as e:
+                logger.error(f"Ошибка создания векторного хранилища через from_documents: {e}")
+                # Fallback: создаем пустое хранилище и добавляем по одному
+                self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
+                
+                # Добавляем документы по одному для стабильности
+                for i, chunk in enumerate(all_splits):
+                    try:
+                        # Используем add_texts с правильными параметрами
+                        self.vector_store.add_texts([chunk.page_content], [chunk.metadata])
+                        logger.info(f"Добавлен чанк {i+1}/{len(all_splits)}")
+                    except Exception as e2:
+                        logger.error(f"Ошибка добавления чанка {i+1}: {e2}")
+                        continue
             
             # 4. Создание retriever (как в notebook)
             self.retriever = self.vector_store.as_retriever(

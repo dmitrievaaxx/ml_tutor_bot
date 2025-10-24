@@ -1660,6 +1660,7 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                     # Используем простой подход - создаем векторное хранилище напрямую
                     from langchain_text_splitters import RecursiveCharacterTextSplitter
                     from langchain_core.documents import Document
+                    from langchain_core.vectorstores import InMemoryVectorStore
                     
                     # Создаем документ из текста
                     doc = Document(page_content=document_text, metadata={"source": "uploaded_text"})
@@ -1669,15 +1670,25 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                     chunks = text_splitter.split_documents([doc])
                     
                     # Создаем векторное хранилище
-                    rag_system.vector_store = rag_system.vector_store or rag_system._create_empty_vector_store()
+                    rag_system.vector_store = rag_system._create_empty_vector_store()
                     
-                    # Добавляем чанки
-                    for chunk in chunks:
-                        try:
-                            rag_system.vector_store.add_texts([chunk.page_content], [chunk.metadata])
-                        except Exception as e:
-                            logger.error(f"Ошибка добавления чанка: {e}")
-                            continue
+                    # Добавляем чанки через from_documents (более стабильный метод)
+                    try:
+                        # Используем from_documents для создания векторного хранилища
+                        rag_system.vector_store = InMemoryVectorStore.from_documents(
+                            chunks,
+                            embedding=rag_system.embeddings
+                        )
+                        logger.info(f"Векторное хранилище создано успешно с {len(chunks)} чанками")
+                    except Exception as e:
+                        logger.error(f"Ошибка создания векторного хранилища через from_documents: {e}")
+                        # Fallback: добавляем по одному
+                        for chunk in chunks:
+                            try:
+                                rag_system.vector_store.add_texts([chunk.page_content], [chunk.metadata])
+                            except Exception as e2:
+                                logger.error(f"Ошибка добавления чанка: {e2}")
+                                continue
                     
                     # Создаем retriever
                     rag_system.retriever = rag_system.vector_store.as_retriever(search_kwargs={'k': 3})
