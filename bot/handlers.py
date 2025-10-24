@@ -1567,9 +1567,7 @@ async def handle_pdf_file(message: Message):
                 success_text += f"👥 Авторы: {safe_authors}\n"
             if arxiv_id:
                 success_text += f"🔗 ArXiv ID: {safe_arxiv_id}\n"
-            success_text += f"📊 Страниц: {result['pages']}\n"
-            success_text += f"📝 Чанков: {result['chunks_count']}\n\n"
-            success_text += "💬 **Теперь можете задавать вопросы по статье!**\n\n"
+            success_text += "\n"
             
             # Добавляем примеры вопросов
             success_text += "💡 **Примеры вопросов:**\n"
