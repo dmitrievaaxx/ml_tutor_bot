@@ -541,3 +541,19 @@ class Database:
         conn.close()
         
         return count > 0
+    
+    def clear_user_documents(self, user_id: int):
+        """Clear all documents for a user (exit from RAG mode)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Удаляем связь пользователя с документами
+        cursor.execute("DELETE FROM user_documents WHERE user_id = ?", (user_id,))
+        
+        # Удаляем сами документы пользователя
+        cursor.execute("DELETE FROM documents WHERE user_id = ?", (user_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Очищены документы пользователя {user_id}")
