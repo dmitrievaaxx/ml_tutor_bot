@@ -565,12 +565,20 @@ async def handle_level_selection(callback_query: CallbackQuery):
         # Получаем приветственное сообщение для выбранного уровня
         welcome_message = get_welcome_message(level)
         
+        # Создаем клавиатуру с кнопкой возврата в главное меню
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
+            ]
+        ])
+        
         # Отправляем сообщение с подтверждением и приветствием
         await callback_query.message.edit_text(
             f"{welcome_message}\n\n"
             "Теперь я буду адаптировать ответы под ваш уровень знаний. Задавайте любые вопросы!\n\n"
             "💡 Используйте команду /level для смены уровня.",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=keyboard
         )
         await callback_query.answer()
     
