@@ -443,7 +443,8 @@ Context retrieved for the last question:
             # Определяем источник ответа
             source = self._determine_answer_source(quality, relevant_chunks)
             
-            logger.info(f"RAG ответ на вопрос: {question[:50]}... (качество: {quality})")
+            logger.info(f"RAG ответ на вопрос: {question[:50]}... (качество: {quality}, источник: {source}, чанков: {len(relevant_chunks)})")
+            logger.info(f"Ответ: {answer[:100]}...")
             
             return {
                 'answer': answer,
@@ -463,7 +464,7 @@ Context retrieved for the last question:
     def _analyze_answer_quality(self, question: str, answer: str, chunks: List) -> str:
         """Анализ качества ответа"""
         try:
-            # Простой анализ качества на основе ключевых слов
+            # Более гибкий анализ качества
             question_lower = question.lower()
             answer_lower = answer.lower()
             
@@ -481,12 +482,26 @@ Context retrieved for the last question:
             chunks_overlap = question_words.intersection(chunks_words)
             chunks_ratio = len(chunks_overlap) / len(question_words) if question_words else 0
             
-            # Определяем качество
-            if overlap_ratio > 0.3 and chunks_ratio > 0.2:
-                return 'high'
-            elif overlap_ratio > 0.1 and chunks_ratio > 0.1:
-                return 'medium'
+            # Проверяем, есть ли релевантные чанки
+            has_relevant_chunks = len(chunks) > 0
+            
+            # Проверяем, не является ли ответ стандартным "не нашел"
+            is_standard_no_answer = "не нашел ответа" in answer_lower or "я не нашел" in answer_lower
+            
+            # Более гибкие критерии качества
+            if has_relevant_chunks and not is_standard_no_answer:
+                if overlap_ratio > 0.2 or chunks_ratio > 0.15:
+                    logger.info(f"Высокое качество: overlap={overlap_ratio:.2f}, chunks={chunks_ratio:.2f}")
+                    return 'high'
+                elif overlap_ratio > 0.05 or chunks_ratio > 0.05:
+                    logger.info(f"Среднее качество: overlap={overlap_ratio:.2f}, chunks={chunks_ratio:.2f}")
+                    return 'medium'
+                else:
+                    # Если есть чанки, но мало пересечений, все равно считаем частично релевантным
+                    logger.info(f"Частично релевантно: overlap={overlap_ratio:.2f}, chunks={chunks_ratio:.2f}, но есть чанки")
+                    return 'medium'
             else:
+                logger.info(f"Низкое качество: overlap={overlap_ratio:.2f}, chunks={chunks_ratio:.2f}, has_chunks={has_relevant_chunks}, is_no_answer={is_standard_no_answer}")
                 return 'low'
                 
         except Exception as e:

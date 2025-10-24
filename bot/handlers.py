@@ -1710,6 +1710,8 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
             # Используем полноценную RAG систему для ответа
             rag_result = rag_system.answer_question(query, dialog_history)
             
+            logger.info(f"RAG результат: source={rag_result['source']}, quality={rag_result['quality']}, chunks={rag_result.get('chunks_used', 0)}")
+            
             if rag_result['source'] == 'error':
                 logger.error(f"Ошибка RAG ответа: {rag_result['answer']}")
                 return await get_llm_response(dialog_history)
