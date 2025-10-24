@@ -1669,41 +1669,30 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
                     chunks = text_splitter.split_documents([doc])
                     
-                    # Создаем векторное хранилище (обходной путь для OpenRouter)
+                    # Создаем векторное хранилище
                     try:
-                        # Создаем пустое векторное хранилище без embeddings
-                        rag_system.vector_store = InMemoryVectorStore()
-                        
-                        # Добавляем чанки напрямую (без embeddings пока)
+                        # Используем from_documents для создания векторного хранилища
+                        rag_system.vector_store = InMemoryVectorStore.from_documents(
+                            chunks,
+                            embedding=rag_system.embeddings
+                        )
+                        logger.info(f"Векторное хранилище создано успешно с {len(chunks)} чанками")
+                    except Exception as e:
+                        logger.error(f"Ошибка создания векторного хранилища через from_documents: {e}")
+                        # Fallback: добавляем по одному
+                        rag_system.vector_store = InMemoryVectorStore(embedding=rag_system.embeddings)
                         for chunk in chunks:
                             try:
                                 rag_system.vector_store.add_texts([chunk.page_content], [chunk.metadata])
                             except Exception as e2:
                                 logger.error(f"Ошибка добавления чанка: {e2}")
                                 continue
-                        
-                        logger.info(f"Векторное хранилище создано с {len(chunks)} чанками (без embeddings)")
-                        
-                    except Exception as e:
-                        logger.error(f"Критическая ошибка создания векторного хранилища: {e}")
-                        rag_system.vector_store = None
                     
                     # Создаем retriever
-                    if rag_system.vector_store:
-                        try:
-                            rag_system.retriever = rag_system.vector_store.as_retriever(search_kwargs={'k': 3})
-                            logger.info("Retriever создан успешно")
-                        except Exception as e:
-                            logger.error(f"Ошибка создания retriever: {e}")
-                            rag_system.retriever = None
-                    else:
-                        rag_system.retriever = None
+                    rag_system.retriever = rag_system.vector_store.as_retriever(search_kwargs={'k': 3})
                     
                     # Создаем RAG цепочки
-                    if rag_system.retriever:
-                        rag_system._create_rag_chains()
-                    else:
-                        logger.warning("Retriever недоступен, RAG цепочки не созданы")
+                    rag_system._create_rag_chains()
                     
                 finally:
                     if os.path.exists(pdf_temp_path):
