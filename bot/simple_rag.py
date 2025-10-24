@@ -11,7 +11,7 @@ try:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from langchain_core.vectorstores import InMemoryVectorStore
     from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.runnables import RunnablePassthrough
     from langchain_core.messages import HumanMessage, AIMessage
@@ -27,6 +27,7 @@ except ImportError as e:
     RunnablePassthrough = None
     HumanMessage = None
     AIMessage = None
+    MessagesPlaceholder = None
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +42,27 @@ class SimpleRAG:
         self.vector_store = None
         self.retriever = None
         self.llm = None
+        self.llm_query_transform = None
         self.rag_chain = None
+        self.rag_conversation_chain = None
+        self.rag_query_transform_chain = None
         self._initialize_components()
     
     def _initialize_components(self):
         """Инициализация компонентов RAG"""
         try:
-            # Инициализируем LLM (используем OpenRouter вместо OpenAI)
+            # Инициализируем основной LLM (используем OpenRouter вместо OpenAI)
             self.llm = ChatOpenAI(
                 model="meta-llama/llama-3.3-70b-instruct:free", 
                 temperature=0.9,
+                openai_api_base="https://openrouter.ai/api/v1",
+                openai_api_key=os.getenv("OPENROUTER_API_KEY")
+            )
+            
+            # Инициализируем LLM для Query Transformation (как в notebook)
+            self.llm_query_transform = ChatOpenAI(
+                model="meta-llama/llama-3.3-70b-instruct:free",
+                temperature=0.4,
                 openai_api_base="https://openrouter.ai/api/v1",
                 openai_api_key=os.getenv("OPENROUTER_API_KEY")
             )
@@ -135,8 +147,8 @@ class SimpleRAG:
                 search_kwargs={'k': 3}
             )
             
-            # 5. Создание RAG цепочки (как в notebook)
-            self._create_rag_chain()
+            # 5. Создание всех RAG цепочек (как в notebook)
+            self._create_rag_chains()
             
             # Создаем превью контента
             content_preview = self._create_content_preview(pages)
@@ -159,8 +171,26 @@ class SimpleRAG:
                 'error': f'Ошибка обработки: {str(e)}'
             }
     
-    def _create_rag_chain(self):
-        """Создание RAG цепочки (как в notebook)"""
+    def _create_rag_chains(self):
+        """Создание всех RAG цепочек (как в notebook)"""
+        try:
+            # 1. Базовая RAG цепочка (как в notebook)
+            self._create_basic_rag_chain()
+            
+            # 2. Conversational RAG цепочка (как в notebook)
+            self._create_conversational_rag_chain()
+            
+            # 3. RAG с Query Transformation (как в notebook)
+            self._create_query_transform_rag_chain()
+            
+            logger.info("Все RAG цепочки созданы")
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания RAG цепочек: {e}")
+            raise
+    
+    def _create_basic_rag_chain(self):
+        """Создание базовой RAG цепочки (как в notebook)"""
         try:
             # Системный промпт (как в notebook)
             SYSTEM_TEMPLATE = """
@@ -191,10 +221,105 @@ Context:
                 | StrOutputParser()
             )
             
-            logger.info("RAG цепочка создана")
+            logger.info("Базовая RAG цепочка создана")
             
         except Exception as e:
-            logger.error(f"Ошибка создания RAG цепочки: {e}")
+            logger.error(f"Ошибка создания базовой RAG цепочки: {e}")
+            raise
+    
+    def _create_conversational_rag_chain(self):
+        """Создание conversational RAG цепочки (как в notebook)"""
+        try:
+            # Conversational системный промпт (как в notebook)
+            CONVERSATION_SYSTEM_TEMPLATE = """
+You are an assistant for question-answering tasks. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
+
+Context retrieved for the last question:
+
+{context}
+"""
+            
+            # Создаем conversational промпт (как в notebook)
+            conversational_answering_prompt = ChatPromptTemplate([
+                ("system", CONVERSATION_SYSTEM_TEMPLATE),
+                ("placeholder", "{messages}")
+            ])
+            
+            # Функция для получения последнего сообщения (как в notebook)
+            def get_last_message_for_retriever_input(params: Dict):
+                return params["messages"][-1].content
+            
+            # Функция форматирования чанков
+            def format_chunks(chunks):
+                return "\n\n".join(chunk.page_content for chunk in chunks)
+            
+            # Создаем conversational RAG цепочку (как в notebook)
+            self.rag_conversation_chain = (
+                RunnablePassthrough.assign(
+                    context=get_last_message_for_retriever_input | self.retriever | format_chunks
+                )
+                | conversational_answering_prompt
+                | self.llm
+                | StrOutputParser()
+            )
+            
+            logger.info("Conversational RAG цепочка создана")
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания conversational RAG цепочки: {e}")
+            raise
+    
+    def _create_query_transform_rag_chain(self):
+        """Создание RAG цепочки с Query Transformation (как в notebook)"""
+        try:
+            # Промпт для Query Transformation (как в notebook)
+            retrieval_query_transform_prompt = ChatPromptTemplate.from_messages([
+                MessagesPlaceholder(variable_name="messages"),
+                (
+                    "user",
+                    "Transform last user message to a search query in Russian language according to the whole conversation history above to further retrieve the information relevant to the conversation. Try to thorougly analyze all message to generate the most relevant query. The longer result better than short. Let it be better more abstract than specific. Only respond with the query, nothing else.",
+                ),
+            ])
+            
+            # Создаем цепочку Query Transformation (как в notebook)
+            retrieval_query_transformation_chain = (
+                retrieval_query_transform_prompt 
+                | self.llm_query_transform 
+                | StrOutputParser()
+            )
+            
+            # Conversational промпт для ответов
+            CONVERSATION_SYSTEM_TEMPLATE = """
+You are an assistant for question-answering tasks. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
+
+Context retrieved for the last question:
+
+{context}
+"""
+            
+            conversational_answering_prompt = ChatPromptTemplate([
+                ("system", CONVERSATION_SYSTEM_TEMPLATE),
+                ("placeholder", "{messages}")
+            ])
+            
+            # Функция форматирования чанков
+            def format_chunks(chunks):
+                return "\n\n".join(chunk.page_content for chunk in chunks)
+            
+            # Создаем RAG цепочку с Query Transformation (как в notebook)
+            self.rag_query_transform_chain = (
+                RunnablePassthrough.assign(
+                    context=retrieval_query_transformation_chain | self.retriever | format_chunks
+                )
+                | conversational_answering_prompt
+                | self.llm
+                | StrOutputParser()
+            )
+            
+            logger.info("RAG цепочка с Query Transformation создана")
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания RAG цепочки с Query Transformation: {e}")
             raise
     
     def _create_content_preview(self, pages: List, length: int = 500) -> str:
@@ -263,12 +388,13 @@ Context:
                 'arxiv_id': ''
             }
     
-    def answer_question(self, question: str) -> Dict[str, Any]:
+    def answer_question(self, question: str, conversation_history: List = None) -> Dict[str, Any]:
         """
-        Ответ на вопрос через RAG с анализом качества
+        Ответ на вопрос через RAG с поддержкой диалогов (как в notebook)
         
         Args:
             question: Вопрос пользователя
+            conversation_history: История диалога для conversational RAG
             
         Returns:
             Словарь с ответом и метаданными
@@ -281,11 +407,32 @@ Context:
                     'quality': 'low'
                 }
             
+            # Если есть история диалога, используем conversational RAG
+            if conversation_history and len(conversation_history) > 1:
+                logger.info("Используем conversational RAG с Query Transformation")
+                
+                # Создаем сообщения для conversational RAG
+                messages = []
+                for msg in conversation_history[-5:]:  # Берем последние 5 сообщений
+                    if msg.get('role') == 'user':
+                        messages.append(HumanMessage(content=msg.get('content', '')))
+                    elif msg.get('role') == 'assistant':
+                        messages.append(AIMessage(content=msg.get('content', '')))
+                
+                # Добавляем текущий вопрос
+                messages.append(HumanMessage(content=question))
+                
+                # Используем RAG цепочку с Query Transformation (как в notebook)
+                answer = self.rag_query_transform_chain.invoke({"messages": messages})
+                
+            else:
+                logger.info("Используем базовую RAG цепочку")
+                
+                # Используем базовую RAG цепочку (как в notebook)
+                answer = self.rag_chain.invoke(question)
+            
             # Получаем релевантные чанки для анализа
             relevant_chunks = self.retriever.invoke(question)
-            
-            # Используем RAG цепочку (как в notebook)
-            answer = self.rag_chain.invoke(question)
             
             # Анализируем качество ответа
             quality = self._analyze_answer_quality(question, answer, relevant_chunks)
