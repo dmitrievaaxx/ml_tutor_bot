@@ -1723,6 +1723,12 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                 # Если в документе нет информации, показываем сообщение и получаем общий ответ
                 logger.info(f"В документе нет информации для вопроса: {query[:50]}...")
                 general_response = await get_llm_response(dialog_history)
+                
+                # Убираем фразу "Могу рассказать про..." из ответа
+                import re
+                general_response = re.sub(r'\n\nМогу рассказать про.*?Хочешь\?', '', general_response, flags=re.DOTALL)
+                general_response = re.sub(r'Могу рассказать про.*?Хочешь\?', '', general_response, flags=re.DOTALL)
+                
                 response = f"❌ В документе нет информации об этом.\n\n{general_response}"
             
             # Добавляем напоминание о команде /exit
