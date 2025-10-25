@@ -122,6 +122,8 @@ class SimpleRAG:
                 embedding=self.embeddings
             )
             logger.info(f"Векторное хранилище создано с {len(all_splits)} чанками")
+            for i, chunk in enumerate(all_splits):
+                logger.info(f"Чанк {i+1} при создании: {chunk.page_content[:150]}...")
             
             # 4. Создание retriever (как в notebook)
             self.retriever = self.vector_store.as_retriever(
@@ -465,6 +467,8 @@ Context retrieved for the last question:
             logger.info(f"Чанки найдены: {len(chunks)}")
             if chunks:
                 logger.info(f"Первый чанк: {chunks[0].page_content[:200]}...")
+                for i, chunk in enumerate(chunks):
+                    logger.info(f"Чанк {i+1}: {chunk.page_content[:100]}...")
             
             # Подсчитываем пересечение слов
             common_words = question_words.intersection(answer_words)
