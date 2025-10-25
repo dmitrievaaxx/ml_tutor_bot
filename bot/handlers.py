@@ -341,7 +341,6 @@ async def handle_exit(message: Message):
 • Задавать общие вопросы по машинному обучению
 • Сменить уровень знаний командой /level
 • Изучать курсы командой /learn
-• Загрузить новую статью командой /upload
 
 Используйте /start для возврата в главное меню."""
     
@@ -586,16 +585,6 @@ async def handle_level_selection(callback_query: CallbackQuery):
         await handle_learn(callback_query.message)
         await callback_query.answer()
     
-    elif data == "upload_pdf":
-        # Переход к загрузке PDF
-        try:
-            await callback_query.message.delete()
-        except:
-            pass  # Игнорируем ошибки удаления
-        
-        await handle_upload(callback_query.message)
-        await callback_query.answer()
-        
 
 async def handle_message(message: Message):
     """
@@ -1462,29 +1451,6 @@ def _validate_mathematical_answer(question: str, options: list, correct_answer: 
 
 
 # RAG обработчики (KISS принцип)
-async def handle_upload(message: Message):
-    """Обработка команды /upload - загрузка PDF статьи"""
-    user_id = message.from_user.id
-    
-    logger.info(f"Команда /upload от пользователя {user_id}")
-    
-    upload_text = """📄 **Загрузка PDF статьи**
-
-Отправь PDF-файл статьи по машинному обучению — и я помогу разобраться в её содержимом, объясню идеи и отвечу на вопросы.
-
-**Как использовать?**
-1️⃣ Отправь PDF-файл
-2️⃣ Дождись обработки
-3️⃣ Задавай вопросы по содержанию"""
-    
-    # Создаем клавиатуру с кнопкой возврата в главное меню
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")
-        ]
-    ])
-    
-    await message.answer(upload_text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 async def handle_pdf_file(message: Message):
@@ -1782,7 +1748,6 @@ def register_handlers(dp: Dispatcher):
     dp.message.register(handle_clear, Command("clear"))
     
     # RAG обработчики (KISS принцип)
-    dp.message.register(handle_upload, Command("upload"))
     dp.message.register(handle_pdf_file, F.document)
     
     # Обработчик неизвестных команд (команды, начинающиеся с /, но не зарегистрированные)
@@ -1791,7 +1756,6 @@ def register_handlers(dp: Dispatcher):
     # Обработчик нажатий на кнопки выбора уровня
     dp.callback_query.register(handle_level_selection, F.data.startswith("level_"))
     dp.callback_query.register(handle_level_selection, F.data == "show_courses")
-    dp.callback_query.register(handle_level_selection, F.data == "upload_pdf")
     
     # Обработчик выбора курсов
     dp.callback_query.register(handle_course_selection, F.data.startswith("course_"))
