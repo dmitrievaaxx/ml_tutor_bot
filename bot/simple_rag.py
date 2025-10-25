@@ -67,21 +67,9 @@ class SimpleRAG:
                 openai_api_key=os.getenv("OPENROUTER_API_KEY")
             )
             
-            # Инициализируем эмбеддинги (используем настоящий OpenAI API)
-            openai_key = os.getenv("OPENAI_API_KEY")
-            if not openai_key:
-                logger.warning("OPENAI_API_KEY не найден, используем OpenRouter для embeddings")
-                self.embeddings = OpenAIEmbeddings(
-                    model="text-embedding-3-large",
-                    openai_api_base="https://openrouter.ai/api/v1",
-                    openai_api_key=os.getenv("OPENROUTER_API_KEY")
-                )
-            else:
-                logger.info("Используем настоящий OpenAI API для embeddings")
-                self.embeddings = OpenAIEmbeddings(
-                    model="text-embedding-3-large",
-                    openai_api_key=openai_key
-                )
+            # Инициализируем эмбеддинги (как в notebook)
+            logger.info("Используем OpenAI API для embeddings (как в notebook)")
+            self.embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
             
             logger.info("RAG компоненты инициализированы с OpenRouter")
             
@@ -128,27 +116,12 @@ class SimpleRAG:
             # 3. Создание векторного хранилища (как в notebook)
             logger.info("Создаю векторное хранилище...")
             
-            try:
-                # Используем from_documents для создания векторного хранилища
-                self.vector_store = InMemoryVectorStore.from_documents(
-                    all_splits,
-                    embedding=self.embeddings
-                )
-                logger.info(f"Векторное хранилище создано успешно с {len(all_splits)} чанками")
-            except Exception as e:
-                logger.error(f"Ошибка создания векторного хранилища через from_documents: {e}")
-                # Fallback: создаем пустое хранилище и добавляем по одному
-                self.vector_store = InMemoryVectorStore(embedding=self.embeddings)
-                
-                # Добавляем документы по одному для стабильности
-                for i, chunk in enumerate(all_splits):
-                    try:
-                        # Используем add_texts с правильными параметрами
-                        self.vector_store.add_texts([chunk.page_content], [chunk.metadata])
-                        logger.info(f"Добавлен чанк {i+1}/{len(all_splits)}")
-                    except Exception as e2:
-                        logger.error(f"Ошибка добавления чанка {i+1}: {e2}")
-                        continue
+            # Создаем векторное хранилище (как в notebook)
+            self.vector_store = InMemoryVectorStore.from_documents(
+                all_splits,
+                embedding=self.embeddings
+            )
+            logger.info(f"Векторное хранилище создано с {len(all_splits)} чанками")
             
             # 4. Создание retriever (как в notebook)
             self.retriever = self.vector_store.as_retriever(
@@ -197,6 +170,10 @@ class SimpleRAG:
             logger.error(f"Ошибка создания RAG цепочек: {e}")
             raise
     
+    def format_chunks(self, chunks):
+        """Объединяем чанки в одну строку (как в notebook)"""
+        return "\n\n".join(chunk.page_content for chunk in chunks)
+    
     def _create_basic_rag_chain(self):
         """Создание базовой RAG цепочки (как в notebook)"""
         try:
@@ -217,13 +194,9 @@ Context:
                 ("human", "{question}"),
             ])
             
-            # Функция форматирования чанков (как в notebook)
-            def format_chunks(chunks):
-                return "\n\n".join(chunk.page_content for chunk in chunks)
-            
             # Создаем RAG цепочку (как в notebook)
             self.rag_chain = (
-                {"context": self.retriever | format_chunks, "question": RunnablePassthrough()}
+                {"context": self.retriever | self.format_chunks, "question": RunnablePassthrough()}
                 | question_answering_prompt
                 | self.llm
                 | StrOutputParser()
@@ -257,14 +230,10 @@ Context retrieved for the last question:
             def get_last_message_for_retriever_input(params: Dict):
                 return params["messages"][-1].content
             
-            # Функция форматирования чанков
-            def format_chunks(chunks):
-                return "\n\n".join(chunk.page_content for chunk in chunks)
-            
             # Создаем conversational RAG цепочку (как в notebook)
             self.rag_conversation_chain = (
                 RunnablePassthrough.assign(
-                    context=get_last_message_for_retriever_input | self.retriever | format_chunks
+                    context=get_last_message_for_retriever_input | self.retriever | self.format_chunks
                 )
                 | conversational_answering_prompt
                 | self.llm
@@ -310,14 +279,10 @@ Context retrieved for the last question:
                 ("placeholder", "{messages}")
             ])
             
-            # Функция форматирования чанков
-            def format_chunks(chunks):
-                return "\n\n".join(chunk.page_content for chunk in chunks)
-            
             # Создаем RAG цепочку с Query Transformation (как в notebook)
             self.rag_query_transform_chain = (
                 RunnablePassthrough.assign(
-                    context=retrieval_query_transformation_chain | self.retriever | format_chunks
+                    context=retrieval_query_transformation_chain | self.retriever | self.format_chunks
                 )
                 | conversational_answering_prompt
                 | self.llm
