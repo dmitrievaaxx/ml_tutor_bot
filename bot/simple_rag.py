@@ -523,7 +523,8 @@ Context retrieved for the last question:
             has_relevant_chunks = len(chunks) > 0
             
             # Проверяем, не является ли ответ стандартным "не нашел"
-            is_standard_no_answer = "не нашел ответа" in answer_lower or "я не нашел" in answer_lower
+            # Но только если нет ключевых слов из вопроса в ответе
+            is_standard_no_answer = ("не нашел ответа" in answer_lower or "я не нашел" in answer_lower) and not key_words_in_answer
             
             # Более гибкие критерии качества
             logger.info(f"Критерии: has_chunks={has_relevant_chunks}, is_no_answer={is_standard_no_answer}, key_words={key_words_in_answer}, similar={similar_words_found}")
