@@ -297,7 +297,7 @@ Context retrieved for the last question:
             logger.error(f"Ошибка создания RAG цепочки с Query Transformation: {e}")
             raise
     
-    def _create_content_preview(self, pages: List, length: int = 500) -> str:
+    def _create_content_preview(self, pages: List, length: int = 20000) -> str:
         """Создание превью контента"""
         try:
             if not pages:
