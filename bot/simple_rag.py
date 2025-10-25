@@ -461,6 +461,10 @@ Context retrieved for the last question:
             answer_words = set(answer_lower.split())
             
             logger.info(f"Анализ качества: вопрос='{question}', слова вопроса={question_words}")
+            logger.info(f"Ответ: {answer[:200]}...")
+            logger.info(f"Чанки найдены: {len(chunks)}")
+            if chunks:
+                logger.info(f"Первый чанк: {chunks[0].page_content[:200]}...")
             
             # Подсчитываем пересечение слов
             common_words = question_words.intersection(answer_words)
@@ -522,6 +526,8 @@ Context retrieved for the last question:
             is_standard_no_answer = "не нашел ответа" in answer_lower or "я не нашел" in answer_lower
             
             # Более гибкие критерии качества
+            logger.info(f"Критерии: has_chunks={has_relevant_chunks}, is_no_answer={is_standard_no_answer}, key_words={key_words_in_answer}, similar={similar_words_found}")
+            
             if has_relevant_chunks and not is_standard_no_answer:
                 # Если есть ключевые слова в ответе, похожие слова или хорошее пересечение - высокое качество
                 if key_words_in_answer or similar_words_found or overlap_ratio > 0.2 or chunks_ratio > 0.15:
