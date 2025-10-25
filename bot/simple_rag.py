@@ -398,14 +398,32 @@ Context retrieved for the last question:
                 # Используем RAG цепочку с Query Transformation (как в notebook)
                 answer = self.rag_query_transform_chain.invoke({"messages": messages})
                 
+                # Для коротких ответов типа "Да", "Нет" используем последний вопрос из истории
+                if len(question.strip()) <= 3 and conversation_history:
+                    # Берем последний вопрос пользователя из истории
+                    last_user_question = None
+                    for msg in reversed(conversation_history):
+                        if msg.get('role') == 'user' and len(msg.get('content', '').strip()) > 3:
+                            last_user_question = msg.get('content', '')
+                            break
+                    
+                    if last_user_question:
+                        logger.info(f"Короткий ответ '{question}', используем последний вопрос: '{last_user_question}'")
+                        # Обновляем релевантные чанки на основе последнего вопроса
+                        relevant_chunks = self.retriever.invoke(last_user_question)
+                
             else:
                 logger.info("Используем базовую RAG цепочку")
                 
                 # Используем базовую RAG цепочку (как в notebook)
                 answer = self.rag_chain.invoke(question)
+                
+                # Получаем релевантные чанки для анализа
+                relevant_chunks = self.retriever.invoke(question)
             
-            # Получаем релевантные чанки для анализа
-            relevant_chunks = self.retriever.invoke(question)
+            # Если релевантные чанки еще не получены (для conversational RAG без коротких ответов)
+            if 'relevant_chunks' not in locals():
+                relevant_chunks = self.retriever.invoke(question)
             
             # Анализируем качество ответа
             quality = self._analyze_answer_quality(question, answer, relevant_chunks)
@@ -442,15 +460,60 @@ Context retrieved for the last question:
             question_words = set(question_lower.split())
             answer_words = set(answer_lower.split())
             
+            logger.info(f"Анализ качества: вопрос='{question}', слова вопроса={question_words}")
+            
             # Подсчитываем пересечение слов
             common_words = question_words.intersection(answer_words)
             overlap_ratio = len(common_words) / len(question_words) if question_words else 0
+            
+            # Дополнительная проверка: ищем ключевые слова из вопроса в ответе
+            key_words_in_answer = False
+            for q_word in question_words:
+                if len(q_word) > 3 and q_word in answer_lower:
+                    key_words_in_answer = True
+                    logger.info(f"Найдено ключевое слово '{q_word}' в ответе")
+                    break
             
             # Проверяем наличие информации в чанках
             chunks_content = " ".join([chunk.page_content.lower() for chunk in chunks])
             chunks_words = set(chunks_content.split())
             chunks_overlap = question_words.intersection(chunks_words)
             chunks_ratio = len(chunks_overlap) / len(question_words) if question_words else 0
+            
+            # Дополнительная проверка: ищем похожие слова (для случаев типа "беггинг" vs "бэггинг")
+            similar_words_found = False
+            
+            # Специальные случаи для русских слов с разным написанием
+            word_variations = {
+                'беггинг': ['бэггинг', 'bagging'],
+                'бэггинг': ['беггинг', 'bagging'],
+                'bagging': ['беггинг', 'бэггинг'],
+                'бустинг': ['бустинг', 'boosting'],
+                'boosting': ['бустинг', 'бустинг'],
+                'ансамбль': ['ensemble'],
+                'ensemble': ['ансамбль']
+            }
+            
+            for q_word in question_words:
+                if len(q_word) > 3:  # Только для слов длиннее 3 символов
+                    # Проверяем вариации слова
+                    variations_to_check = [q_word]
+                    if q_word in word_variations:
+                        variations_to_check.extend(word_variations[q_word])
+                    
+                    for chunk in chunks:
+                        chunk_text = chunk.page_content.lower()
+                        # Проверяем все вариации слова
+                        for variation in variations_to_check:
+                            if variation in chunk_text:
+                                similar_words_found = True
+                                logger.info(f"Найдено похожее слово: '{q_word}' -> '{variation}' в чанке")
+                                logger.info(f"Содержимое чанка: {chunk_text[:200]}...")
+                                break
+                        if similar_words_found:
+                            break
+                    if similar_words_found:
+                        break
             
             # Проверяем, есть ли релевантные чанки
             has_relevant_chunks = len(chunks) > 0
@@ -460,8 +523,9 @@ Context retrieved for the last question:
             
             # Более гибкие критерии качества
             if has_relevant_chunks and not is_standard_no_answer:
-                if overlap_ratio > 0.2 or chunks_ratio > 0.15:
-                    logger.info(f"Высокое качество: overlap={overlap_ratio:.2f}, chunks={chunks_ratio:.2f}")
+                # Если есть ключевые слова в ответе, похожие слова или хорошее пересечение - высокое качество
+                if key_words_in_answer or similar_words_found or overlap_ratio > 0.2 or chunks_ratio > 0.15:
+                    logger.info(f"Высокое качество: overlap={overlap_ratio:.2f}, chunks={chunks_ratio:.2f}, similar={similar_words_found}, key_words={key_words_in_answer}")
                     return 'high'
                 elif overlap_ratio > 0.05 or chunks_ratio > 0.05:
                     logger.info(f"Среднее качество: overlap={overlap_ratio:.2f}, chunks={chunks_ratio:.2f}")
