@@ -1666,7 +1666,11 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                     doc = Document(page_content=document_text, metadata={"source": "uploaded_text"})
                     
                     # Разбиваем на чанки
-                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
+                    text_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=500, 
+                        chunk_overlap=50,  # Добавляем перекрытие для лучшего контекста
+                        separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]  # Приоритет разделителей
+                    )
                     chunks = text_splitter.split_documents([doc])
                     
                     # Анализируем качество разбиения на чанки

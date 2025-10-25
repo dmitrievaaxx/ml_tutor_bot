@@ -107,7 +107,8 @@ class SimpleRAG:
             # 2. Разбиение на чанки (как в notebook)
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=500, 
-                chunk_overlap=0
+                chunk_overlap=50,  # Добавляем перекрытие для лучшего контекста
+                separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]  # Приоритет разделителей
             )
             all_splits = text_splitter.split_documents(pages)
             
@@ -355,6 +356,8 @@ Context retrieved for the last question:
                 # Проверяем, не обрывается ли чанк на середине предложения
                 if chunk_text and chunk_text[-1] not in '.!?':
                     logger.warning(f"              ⚠️  Чанк {i+1} обрывается на середине предложения!")
+                else:
+                    logger.info(f"              ✅ Чанк {i+1} заканчивается корректно")
             
             # Проверяем пропуски в тексте
             logger.info(f"🔍 ПРОВЕРКА ПОКРЫТИЯ:")
@@ -375,6 +378,21 @@ Context retrieved for the last question:
             
             if coverage_percent < 95:
                 logger.warning(f"   ⚠️  Низкое покрытие текста! Возможны пропуски.")
+            
+            # Общая оценка качества разбиения
+            logger.info(f"📈 ОБЩАЯ ОЦЕНКА КАЧЕСТВА:")
+            broken_chunks = sum(1 for chunk in chunks if chunk.page_content and chunk.page_content[-1] not in '.!?')
+            quality_score = ((len(chunks) - broken_chunks) / len(chunks)) * 100 if chunks else 0
+            
+            logger.info(f"   • Чанков с корректным окончанием: {len(chunks) - broken_chunks}/{len(chunks)}")
+            logger.info(f"   • Оценка качества: {quality_score:.1f}%")
+            
+            if quality_score >= 80:
+                logger.info(f"   ✅ Качество разбиения: ОТЛИЧНО")
+            elif quality_score >= 60:
+                logger.info(f"   ⚠️  Качество разбиения: УДОВЛЕТВОРИТЕЛЬНО")
+            else:
+                logger.warning(f"   ❌ Качество разбиения: ПЛОХО - нужна оптимизация")
             
             logger.info("=" * 80)
             
