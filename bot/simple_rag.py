@@ -113,6 +113,9 @@ class SimpleRAG:
             
             logger.info(f"Создано {len(all_splits)} чанков")
             
+            # Анализируем качество разбиения на чанки
+            self._analyze_chunks_quality(pages, all_splits)
+            
             # 3. Создание векторного хранилища (как в notebook)
             logger.info("Создаю векторное хранилище...")
             
@@ -296,6 +299,87 @@ Context retrieved for the last question:
         except Exception as e:
             logger.error(f"Ошибка создания RAG цепочки с Query Transformation: {e}")
             raise
+    
+    def _analyze_chunks_quality(self, pages: List, chunks: List) -> None:
+        """Анализ качества разбиения текста на чанки"""
+        try:
+            if not pages or not chunks:
+                logger.warning("Нет страниц или чанков для анализа")
+                return
+            
+            # Получаем полный текст
+            full_text = ""
+            for page in pages:
+                full_text += page.page_content + "\n"
+            
+            logger.info("=" * 80)
+            logger.info("АНАЛИЗ КАЧЕСТВА РАЗБИЕНИЯ НА ЧАНКИ")
+            logger.info("=" * 80)
+            
+            # Основная статистика
+            total_text_length = len(full_text)
+            total_chunks = len(chunks)
+            total_chunk_length = sum(len(chunk.page_content) for chunk in chunks)
+            
+            logger.info(f"📊 ОБЩАЯ СТАТИСТИКА:")
+            logger.info(f"   • Длина исходного текста: {total_text_length:,} символов")
+            logger.info(f"   • Количество чанков: {total_chunks}")
+            logger.info(f"   • Общая длина чанков: {total_chunk_length:,} символов")
+            logger.info(f"   • Покрытие текста: {(total_chunk_length/total_text_length)*100:.1f}%")
+            
+            # Анализ размеров чанков
+            chunk_sizes = [len(chunk.page_content) for chunk in chunks]
+            avg_size = sum(chunk_sizes) / len(chunk_sizes)
+            min_size = min(chunk_sizes)
+            max_size = max(chunk_sizes)
+            
+            logger.info(f"📏 РАЗМЕРЫ ЧАНКОВ:")
+            logger.info(f"   • Средний размер: {avg_size:.0f} символов")
+            logger.info(f"   • Минимальный размер: {min_size} символов")
+            logger.info(f"   • Максимальный размер: {max_size} символов")
+            
+            # Детальный анализ каждого чанка
+            logger.info(f"📝 ДЕТАЛЬНЫЙ АНАЛИЗ ЧАНКОВ:")
+            for i, chunk in enumerate(chunks):
+                chunk_text = chunk.page_content
+                chunk_length = len(chunk_text)
+                
+                # Находим начало и конец чанка в исходном тексте
+                start_pos = full_text.find(chunk_text[:50])  # Ищем по первым 50 символам
+                end_pos = start_pos + chunk_length if start_pos != -1 else -1
+                
+                logger.info(f"   Чанк {i+1:2d}: {chunk_length:3d} символов | Позиция: {start_pos:4d}-{end_pos:4d}")
+                logger.info(f"              Начало: {chunk_text[:60]}...")
+                logger.info(f"              Конец:   ...{chunk_text[-40:]}")
+                
+                # Проверяем, не обрывается ли чанк на середине предложения
+                if chunk_text and chunk_text[-1] not in '.!?':
+                    logger.warning(f"              ⚠️  Чанк {i+1} обрывается на середине предложения!")
+            
+            # Проверяем пропуски в тексте
+            logger.info(f"🔍 ПРОВЕРКА ПОКРЫТИЯ:")
+            covered_positions = set()
+            for chunk in chunks:
+                chunk_text = chunk.page_content
+                start_pos = full_text.find(chunk_text[:50])
+                if start_pos != -1:
+                    for pos in range(start_pos, start_pos + len(chunk_text)):
+                        covered_positions.add(pos)
+            
+            total_positions = len(full_text)
+            covered_count = len(covered_positions)
+            coverage_percent = (covered_count / total_positions) * 100
+            
+            logger.info(f"   • Покрыто позиций: {covered_count:,} из {total_positions:,}")
+            logger.info(f"   • Процент покрытия: {coverage_percent:.1f}%")
+            
+            if coverage_percent < 95:
+                logger.warning(f"   ⚠️  Низкое покрытие текста! Возможны пропуски.")
+            
+            logger.info("=" * 80)
+            
+        except Exception as e:
+            logger.error(f"Ошибка анализа качества чанков: {e}")
     
     def _create_content_preview(self, pages: List, length: int = 20000) -> str:
         """Создание превью контента"""

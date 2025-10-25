@@ -1669,6 +1669,16 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
                     chunks = text_splitter.split_documents([doc])
                     
+                    # Анализируем качество разбиения на чанки
+                    logger.info("=" * 60)
+                    logger.info("АНАЛИЗ ЧАНКОВ ПРИ ОБРАБОТКЕ ВОПРОСА")
+                    logger.info("=" * 60)
+                    logger.info(f"Исходный текст: {len(document_text):,} символов")
+                    logger.info(f"Создано чанков: {len(chunks)}")
+                    for i, chunk in enumerate(chunks):
+                        logger.info(f"Чанк {i+1}: {len(chunk.page_content):3d} символов | {chunk.page_content[:80]}...")
+                    logger.info("=" * 60)
+                    
                     # Создаем векторное хранилище
                     try:
                         # Используем from_documents для создания векторного хранилища
