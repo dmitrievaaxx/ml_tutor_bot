@@ -104,13 +104,8 @@ class SimpleRAG:
             
             logger.info(f"Загружено {len(pages)} страниц")
             
-            # 2. Разбиение на чанки (как в notebook)
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500, 
-                chunk_overlap=50,  # Добавляем перекрытие для лучшего контекста
-                separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]  # Приоритет разделителей
-            )
-            all_splits = text_splitter.split_documents(pages)
+            # 2. Разбиение на чанки с улучшенной логикой
+            all_splits = self._smart_chunk_split(pages, chunk_size=400, overlap=100)
             
             logger.info(f"Создано {len(all_splits)} чанков")
             
@@ -398,6 +393,69 @@ Context retrieved for the last question:
             
         except Exception as e:
             logger.error(f"Ошибка анализа качества чанков: {e}")
+    
+    def _smart_chunk_split(self, pages: List, chunk_size: int = 400, overlap: int = 100) -> List:
+        """Умное разбиение текста на чанки с учетом границ предложений"""
+        try:
+            from langchain_core.documents import Document
+            
+            # Объединяем весь текст
+            full_text = ""
+            for page in pages:
+                full_text += page.page_content + "\n"
+            
+            # Разбиваем на предложения
+            import re
+            sentences = re.split(r'(?<=[.!?])\s+', full_text)
+            
+            chunks = []
+            current_chunk = ""
+            current_size = 0
+            
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                
+                # Если добавление предложения превысит размер чанка
+                if current_size + len(sentence) > chunk_size and current_chunk:
+                    # Сохраняем текущий чанк
+                    chunks.append(Document(
+                        page_content=current_chunk.strip(),
+                        metadata={"source": "smart_split"}
+                    ))
+                    
+                    # Начинаем новый чанк с перекрытием
+                    overlap_text = current_chunk[-overlap:] if len(current_chunk) > overlap else current_chunk
+                    current_chunk = overlap_text + " " + sentence
+                    current_size = len(current_chunk)
+                else:
+                    # Добавляем предложение к текущему чанку
+                    if current_chunk:
+                        current_chunk += " " + sentence
+                    else:
+                        current_chunk = sentence
+                    current_size = len(current_chunk)
+            
+            # Добавляем последний чанк
+            if current_chunk.strip():
+                chunks.append(Document(
+                    page_content=current_chunk.strip(),
+                    metadata={"source": "smart_split"}
+                ))
+            
+            logger.info(f"Умное разбиение: создано {len(chunks)} чанков из {len(sentences)} предложений")
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"Ошибка умного разбиения: {e}")
+            # Fallback к стандартному разбиению
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=overlap,
+                separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""]
+            )
+            return text_splitter.split_documents(pages)
     
     def _create_content_preview(self, pages: List, length: int = 20000) -> str:
         """Создание превью контента"""
