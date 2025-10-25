@@ -1725,9 +1725,9 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
             
             # Формируем ответ с префиксом в зависимости от источника
             if rag_result['source'] == 'document':
-                response = f"📄 Ответ на основе документа:\n{rag_result['answer']}"
+                response = f"📄 Ответ RAG системы:\n{rag_result['answer']}"
             elif rag_result['source'] == 'document_partial':
-                response = f"📄 Ответ на основе документа (частично):\n{rag_result['answer']}"
+                response = f"📄 Ответ RAG системы:\n{rag_result['answer']}"
             else:  # not_found
                 # Показываем ответ RAG системы, даже если она говорит "не найдено"
                 logger.info(f"RAG система не нашла информацию для вопроса: {query[:50]}...")
