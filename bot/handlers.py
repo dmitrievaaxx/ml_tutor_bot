@@ -1743,6 +1743,11 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                 general_response = re.sub(r'\n\nМогу рассказать про.*?Хочешь\?', '', general_response, flags=re.DOTALL)
                 general_response = re.sub(r'Могу рассказать про.*?Хочешь\?', '', general_response, flags=re.DOTALL)
                 
+                # Убираем префиксы RAG системы из общего ответа
+                general_response = re.sub(r'📄 Ответ RAG системы:\s*', '', general_response)
+                general_response = re.sub(r'📄 Ответ на основе документа:\s*', '', general_response)
+                general_response = re.sub(r'📄 Ответ на основе документа \(частично\):\s*', '', general_response)
+                
                 # Добавляем общий ответ
                 response += f"\n\n💡 Общий ответ:\n{general_response}"
             
