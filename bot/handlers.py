@@ -14,6 +14,7 @@ from bot.dialog import clear_dialog, add_user_message, add_assistant_message, ge
 from bot.prompts import get_system_prompt, get_welcome_message
 from bot.progress import get_user_progress, mark_topic_completed
 from llm.client import get_llm_response, get_llm_response_for_test
+from llm.tavily_client import search_with_tavily
 from bot.database import Database
 from bot.test_prompts import TEST_GENERATION_PROMPT
 from bot.simple_rag import SimpleRAG
@@ -1704,6 +1705,11 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                 
                 # Добавляем общий ответ
                 response += f"\n\n💡 Общий ответ:\n{general_response}"
+                
+                # Попытка веб-поиска через Tavily
+                web_response = await search_with_tavily(query, max_results=2)
+                if web_response:
+                    response += f"\n\n🌐 Дополнительная информация:\n{web_response}"
             
             # Добавляем напоминание о команде /exit
             response += "\n\n💡 Для выхода из режима анализа документа используйте команду /exit"
