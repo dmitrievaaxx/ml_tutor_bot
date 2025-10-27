@@ -1698,6 +1698,7 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
                 
                 # Убираем префиксы RAG системы из общего ответа
                 general_response = re.sub(r'📄 Ответ RAG системы:\s*', '', general_response)
+                general_response = re.sub(r'^Ответ RAG системы:\s*\n?', '', general_response, flags=re.MULTILINE)  # Удаляем без emoji
                 general_response = re.sub(r'📄 Ответ на основе документа:\s*', '', general_response)
                 general_response = re.sub(r'📄 Ответ на основе документа \(частично\):\s*', '', general_response)
                 
