@@ -18,17 +18,21 @@ async def search_with_tavily(query: str, max_results: int = 3) -> Optional[str]:
     Returns:
         str: Отформатированный ответ с источниками или None если ошибка/нет ключа
     """
+    logger.info(f"🔍 Начинаем веб-поиск через Tavily для запроса: {query[:50]}...")
+    
     try:
         api_key = os.getenv('TAVILY_API_KEY')
+        logger.info(f"🔑 Проверка TAVILY_API_KEY: {'Найден' if api_key else 'НЕ НАЙДЕН'}")
+        
         if not api_key:
-            logger.warning("TAVILY_API_KEY не установлен - пропускаем веб-поиск")
+            logger.warning("⚠️ TAVILY_API_KEY не установлен - пропускаем веб-поиск")
             return None
         
         from tavily import AsyncClient
         
         client = AsyncClient(api_key=api_key)
         
-        logger.info(f"Поиск через Tavily: {query[:50]}...")
+        logger.info(f"✅ Клиент Tavily создан успешно. Выполняем поиск...")
         
         # Выполняем поиск
         response = await client.search(
@@ -37,12 +41,16 @@ async def search_with_tavily(query: str, max_results: int = 3) -> Optional[str]:
             search_depth="basic"  # Используем basic для быстроты
         )
         
+        logger.info(f"📊 Tavily вернул ответ с {len(response.get('results', []))} результатами")
+        
         # Форматируем результаты
         results = []
         for i, result in enumerate(response.get('results', []), 1):
             title = result.get('title', 'Без названия')
             content = result.get('content', 'Нет контента')
             url = result.get('url', '')
+            
+            logger.info(f"📄 Результат {i}: {title[:50]}...")
             
             # Ограничиваем длину контента
             content_preview = content[:300].strip()
@@ -59,15 +67,17 @@ async def search_with_tavily(query: str, max_results: int = 3) -> Optional[str]:
         
         if results:
             formatted_response = "\n".join(results)
-            logger.info(f"Tavily вернул {len(response.get('results', []))} результатов")
+            logger.info(f"✅ Tavily успешно вернул {len(response.get('results', []))} результатов")
             return formatted_response
         else:
-            logger.info("Tavily не нашел результатов")
+            logger.info("⚠️ Tavily не нашел результатов")
             return None
         
-    except ImportError:
-        logger.warning("Библиотека tavily не установлена. Установите: pip install tavily-python")
+    except ImportError as e:
+        logger.warning(f"❌ Библиотека tavily не установлена. Ошибка: {e}. Установите: pip install tavily-python")
         return None
     except Exception as e:
-        logger.error(f"Ошибка поиска Tavily: {e}")
+        logger.error(f"❌ Ошибка поиска Tavily: {type(e).__name__}: {e}")
+        import traceback
+        logger.debug(f"Traceback: {traceback.format_exc()}")
         return None
