@@ -28,14 +28,14 @@ async def search_with_tavily(query: str, max_results: int = 3) -> Optional[str]:
             logger.warning("⚠️ TAVILY_API_KEY не установлен - пропускаем веб-поиск")
             return None
         
-        from tavily import AsyncClient
+        from tavily import Client
         
-        client = AsyncClient(api_key=api_key)
+        client = Client(api_key=api_key)
         
         logger.info(f"✅ Клиент Tavily создан успешно. Выполняем поиск...")
         
-        # Выполняем поиск
-        response = await client.search(
+        # Выполняем поиск (синхронный вызов в async функции)
+        response = client.search(
             query=query,
             max_results=max_results,
             search_depth="basic"  # Используем basic для быстроты
