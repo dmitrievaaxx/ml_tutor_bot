@@ -182,6 +182,8 @@ class SimpleRAG:
             SYSTEM_TEMPLATE = """
 You are an assistant for question-answering tasks.
 Do not use Chinese characters in respond.
+You can understand and analyze content in any language (English, Russian, etc.), but ALWAYS respond in Russian language.
+
 Use the following pieces of retrieved context to answer the user question.
 If you don't know the answer, just say 'Я не нашел ответа на ваш вопрос!'.
 Use three sentences maximum and keep the answer concise.
@@ -215,7 +217,11 @@ Context:
         try:
             # Conversational системный промпт (как в notebook)
             CONVERSATION_SYSTEM_TEMPLATE = """
-You are an assistant for question-answering tasks. Do not use Chinese characters in respond. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
+You are an assistant for question-answering tasks. Do not use Chinese characters in respond. 
+
+You can understand and analyze content in any language (English, Russian, etc.), but ALWAYS respond in Russian language.
+
+Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
 
 Context retrieved for the last question:
 
@@ -256,7 +262,7 @@ Context retrieved for the last question:
                 MessagesPlaceholder(variable_name="messages"),
                 (
                     "user",
-                    "Transform last user message to a search query in Russian language according to the whole conversation history above to further retrieve the information relevant to the conversation. For general questions like 'what is this about?' or 'what is the article about?', search for: article topic, main theme, summary, abstract, main concepts, document content. For specific questions, search for exact information. Try to thoroughly analyze all messages to generate the most relevant query. The longer result better than short. Only respond with the query, nothing else.",
+                    "Transform last user message to a search query that will best retrieve relevant information from the document. CRITICAL: Detect the document language from the conversation history. If the document content is in English, create an English search query; if in Russian, create a Russian query. For general questions like 'what is this about?' or 'what is the article about?', search for: article topic, main theme, summary, abstract, main concepts, document content. For specific questions, search for exact information. Try to thoroughly analyze all messages to generate the most relevant query. The longer result better than short. Only respond with the query, nothing else.",
                 ),
             ])
             
@@ -269,7 +275,11 @@ Context retrieved for the last question:
             
             # Conversational промпт для ответов
             CONVERSATION_SYSTEM_TEMPLATE = """
-You are an assistant for question-answering tasks. Do not use Chinese characters in respond. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
+You are an assistant for question-answering tasks. Do not use Chinese characters in respond. 
+
+You can understand and analyze content in any language (English, Russian, etc.), but ALWAYS respond in Russian language.
+
+Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
 
 Context retrieved for the last question:
 
