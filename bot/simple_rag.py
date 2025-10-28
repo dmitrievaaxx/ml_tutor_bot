@@ -256,7 +256,7 @@ Context retrieved for the last question:
                 MessagesPlaceholder(variable_name="messages"),
                 (
                     "user",
-                    "Transform last user message to a search query in Russian language according to the whole conversation history above to further retrieve the information relevant to the conversation. Try to thorougly analyze all message to generate the most relevant query. The longer result better than short. Let it be better more abstract than specific. Only respond with the query, nothing else.",
+                    "Transform last user message to a search query in Russian language according to the whole conversation history above to further retrieve the information relevant to the conversation. For general questions like 'what is this about?' or 'what is the article about?', search for: article topic, main theme, summary, abstract, main concepts, document content. For specific questions, search for exact information. Try to thoroughly analyze all messages to generate the most relevant query. The longer result better than short. Only respond with the query, nothing else.",
                 ),
             ])
             
