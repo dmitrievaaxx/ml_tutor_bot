@@ -1679,22 +1679,32 @@ async def get_rag_response(query: str, user_id: int, dialog_history: list) -> st
             
             # Формируем ответ с префиксом в зависимости от источника и качества
             quality = rag_result.get('quality', 'low')
+            chunks_used = rag_result.get('chunks_used', 0)
+            
+            logger.info(f"🎯 Принятие решения о показе дополнительной информации:")
+            logger.info(f"   - Источник: {rag_result['source']}")
+            logger.info(f"   - Качество: {quality}")
+            logger.info(f"   - Использовано чанков: {chunks_used}")
+            logger.info(f"   - Длина ответа RAG: {len(rag_result.get('answer', ''))} символов")
             
             if rag_result['source'] == 'document':
                 # RAG нашла полноценный ответ в документе - показываем только его
+                logger.info(f"✅ source='document', quality='{quality}' → показываем ТОЛЬКО RAG ответ")
                 response = f"📄 Ответ RAG системы:\n{rag_result['answer']}"
             elif rag_result['source'] == 'document_partial':
                 # RAG нашла частичный ответ в документе - показываем только его
+                logger.info(f"✅ source='document_partial', quality='{quality}' → показываем ТОЛЬКО RAG ответ")
                 response = f"📄 Ответ RAG системы:\n{rag_result['answer']}"
             else:  # not_found
                 # RAG система не нашла информацию в документе
-                logger.info(f"RAG система не нашла информацию для вопроса: {query[:50]}...")
+                logger.info(f"⚠️ source='not_found', quality='{quality}'")
                 
                 # Сначала показываем ответ RAG системы
                 response = f"📄 Ответ RAG системы:\n{rag_result['answer']}"
                 
                 # Если качество ответа низкое, добавляем общий ответ и веб-поиск
                 if quality == 'low':
+                    logger.info(f"🔻 Качество 'low' → добавляем общий LLM ответ и веб-поиск")
                     # Получаем общий ответ от базового промпта
                     general_response = await get_llm_response(dialog_history)
                     

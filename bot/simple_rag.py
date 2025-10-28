@@ -679,6 +679,9 @@ Context retrieved for the last question:
             common_words = question_words.intersection(answer_words)
             overlap_ratio = len(common_words) / len(question_words) if question_words else 0
             
+            # Проверяем, есть ли релевантные чанки (определяем раньше, чтобы использовать ниже)
+            has_relevant_chunks = len(chunks) > 0
+            
             # Дополнительная проверка: ищем ключевые слова из вопроса в ответе
             key_words_in_answer = False
             for q_word in question_words:
@@ -730,9 +733,6 @@ Context retrieved for the last question:
                             break
                     if similar_words_found:
                         break
-            
-            # Проверяем, есть ли релевантные чанки
-            has_relevant_chunks = len(chunks) > 0
             
             # Проверяем, является ли вопрос общим вопросом о содержании
             general_phrases = ["о чем данная", "about what", "what is this about", "what is the article about",
