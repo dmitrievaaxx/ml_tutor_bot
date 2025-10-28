@@ -688,10 +688,13 @@ Context retrieved for the last question:
                     break
             
             # Проверяем наличие информации в чанках
-            chunks_content = " ".join([chunk.page_content.lower() for chunk in chunks])
-            chunks_words = set(chunks_content.split())
-            chunks_overlap = question_words.intersection(chunks_words)
-            chunks_ratio = len(chunks_overlap) / len(question_words) if question_words else 0
+            if has_relevant_chunks:
+                chunks_content = " ".join([chunk.page_content.lower() for chunk in chunks])
+                chunks_words = set(chunks_content.split())
+                chunks_overlap = question_words.intersection(chunks_words)
+                chunks_ratio = len(chunks_overlap) / len(question_words) if question_words else 0
+            else:
+                chunks_ratio = 0
             
             # Дополнительная проверка: ищем похожие слова (для случаев типа "беггинг" vs "бэггинг")
             similar_words_found = False
@@ -731,6 +734,18 @@ Context retrieved for the last question:
             # Проверяем, есть ли релевантные чанки
             has_relevant_chunks = len(chunks) > 0
             
+            # Проверяем, является ли вопрос общим вопросом о содержании
+            general_phrases = ["о чем данная", "about what", "what is this about", "what is the article about",
+                              "о чем статья", "what is it about", "что это о", "о чем это"]
+            is_general = any(phrase in question_lower for phrase in general_phrases)
+            
+            # Проверяем пересечение ОТВЕТА с чанками (детекция галлюцинаций)
+            # Это особенно важно для общих вопросов и вопросов на разных языках
+            answer_chunks_meaningful_overlap = 0
+            if has_relevant_chunks:
+                answer_chunks_overlap = answer_words.intersection(chunks_words)
+                answer_chunks_meaningful_overlap = len([w for w in answer_chunks_overlap if len(w) > 3])
+            
             # Проверяем, не является ли ответ стандартным "не нашел"
             # Сначала ищем фразу "не нашел" в ответе
             no_answer_phrases = ["не нашел ответа", "я не нашел"]
@@ -753,7 +768,17 @@ Context retrieved for the last question:
                 is_standard_no_answer = False
             
             # Более гибкие критерии качества
-            logger.info(f"Критерии: has_chunks={has_relevant_chunks}, is_no_answer={is_standard_no_answer}, key_words={key_words_in_answer}, similar={similar_words_found}")
+            logger.info(f"Критерии: has_chunks={has_relevant_chunks}, is_general={is_general}, is_no_answer={is_standard_no_answer}, answer_chunks_overlap={answer_chunks_meaningful_overlap}, key_words={key_words_in_answer}, similar={similar_words_found}")
+            
+            # Для общих вопросов или когда chunks_ratio = 0 (вопрос и чанки на разных языках)
+            # используем пересечение ОТВЕТА с чанками вместо пересечения вопроса с чанками
+            if is_general and has_relevant_chunks and answer_chunks_meaningful_overlap > 0:
+                if answer_chunks_meaningful_overlap >= 3:
+                    logger.info(f"Общий вопрос: ответ содержит {answer_chunks_meaningful_overlap} значимых слов из чанков (quality=high)")
+                    return 'high'
+                elif answer_chunks_meaningful_overlap >= 1:
+                    logger.info(f"Общий вопрос: ответ содержит {answer_chunks_meaningful_overlap} значимых слов из чанков (quality=medium)")
+                    return 'medium'
             
             if has_relevant_chunks and not is_standard_no_answer:
                 # Если есть ключевые слова в ответе, похожие слова или хорошее пересечение - высокое качество
