@@ -588,17 +588,20 @@ Context retrieved for the last question:
             if 'relevant_chunks' not in locals():
                 relevant_chunks = self.retriever.invoke(question)
             
+            # Очищаем ответ от лишних фраз "не нашел" если есть релевантный контент
+            answer_cleaned = self._clean_answer(answer)
+            
             # Анализируем качество ответа
-            quality = self._analyze_answer_quality(question, answer, relevant_chunks)
+            quality = self._analyze_answer_quality(question, answer_cleaned, relevant_chunks)
             
             # Определяем источник ответа
             source = self._determine_answer_source(quality, relevant_chunks)
             
             logger.info(f"RAG ответ на вопрос: {question[:50]}... (качество: {quality}, источник: {source}, чанков: {len(relevant_chunks)})")
-            logger.info(f"Ответ: {answer[:100]}...")
+            logger.info(f"Ответ: {answer_cleaned[:100]}...")
             
             return {
-                'answer': answer,
+                'answer': answer_cleaned,
                 'source': source,
                 'quality': quality,
                 'chunks_used': len(relevant_chunks)
@@ -611,6 +614,37 @@ Context retrieved for the last question:
                 'source': 'error',
                 'quality': 'low'
             }
+    
+    def _clean_answer(self, answer: str) -> str:
+        """
+        Очищает ответ от лишних фраз "не нашел" если есть релевантный контент
+        
+        Args:
+            answer: Исходный ответ
+            
+        Returns:
+            str: Очищенный ответ
+        """
+        if not answer:
+            return answer
+        
+        no_answer_phrases = ["не нашел ответа", "я не нашел"]
+        answer_lower = answer.lower()
+        
+        # Проверяем есть ли фраза "не нашел"
+        for phrase in no_answer_phrases:
+            if phrase in answer_lower:
+                # Находим позицию начала фразы
+                phrase_pos = answer_lower.find(phrase)
+                # Если ДО фразы есть достаточно контента (>30 символов),
+                # убираем фразу "не нашел" и все что после нее
+                if len(answer[:phrase_pos].strip()) > 30:
+                    # Удаляем все начиная с "не нашел" до конца
+                    cleaned = answer[:phrase_pos].strip()
+                    logger.info(f"Очищен ответ: удалено '{phrase}' и текст после него (было {len(answer)} символов, стало {len(cleaned)})")
+                    return cleaned
+        
+        return answer
     
     def _analyze_answer_quality(self, question: str, answer: str, chunks: List) -> str:
         """Анализ качества ответа"""
@@ -688,8 +722,25 @@ Context retrieved for the last question:
             has_relevant_chunks = len(chunks) > 0
             
             # Проверяем, не является ли ответ стандартным "не нашел"
-            # Но только если нет ключевых слов из вопроса в ответе
-            is_standard_no_answer = ("не нашел ответа" in answer_lower or "я не нашел" in answer_lower) and not key_words_in_answer
+            # Сначала ищем фразу "не нашел" в ответе
+            no_answer_phrases = ["не нашел ответа", "я не нашел"]
+            has_no_answer_phrase = any(phrase in answer_lower for phrase in no_answer_phrases)
+            
+            # Если есть фраза "не нашел", проверяем есть ли контент ДО этой фразы
+            if has_no_answer_phrase:
+                # Находим позицию начала фразы "не нашел"
+                no_answer_pos = min([
+                    answer_lower.find(phrase) 
+                    for phrase in no_answer_phrases 
+                    if phrase in answer_lower
+                ])
+                # Если ДО фразы "не нашел" есть существенный контент (больше 30 символов),
+                # считаем что ответ есть, просто LLM добавил лишнее в конце
+                content_before_no = answer_lower[:no_answer_pos].strip()
+                has_content_before = len(content_before_no) > 30
+                is_standard_no_answer = not has_content_before and not key_words_in_answer
+            else:
+                is_standard_no_answer = False
             
             # Более гибкие критерии качества
             logger.info(f"Критерии: has_chunks={has_relevant_chunks}, is_no_answer={is_standard_no_answer}, key_words={key_words_in_answer}, similar={similar_words_found}")
