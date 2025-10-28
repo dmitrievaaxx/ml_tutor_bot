@@ -181,6 +181,7 @@ class SimpleRAG:
             # Системный промпт (как в notebook)
             SYSTEM_TEMPLATE = """
 You are an assistant for question-answering tasks.
+Do not use Chinese characters in respond.
 Use the following pieces of retrieved context to answer the user question.
 If you don't know the answer, just say 'Я не нашел ответа на ваш вопрос!'.
 Use three sentences maximum and keep the answer concise.
@@ -214,7 +215,7 @@ Context:
         try:
             # Conversational системный промпт (как в notebook)
             CONVERSATION_SYSTEM_TEMPLATE = """
-You are an assistant for question-answering tasks. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
+You are an assistant for question-answering tasks. Do not use Chinese characters in respond. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
 
 Context retrieved for the last question:
 
@@ -268,7 +269,7 @@ Context retrieved for the last question:
             
             # Conversational промпт для ответов
             CONVERSATION_SYSTEM_TEMPLATE = """
-You are an assistant for question-answering tasks. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
+You are an assistant for question-answering tasks. Do not use Chinese characters in respond. Answer the user's questions based on the conversation history and below context retrieved for the last question. Answer 'Я не нашел ответа на ваш вопрос!' if you don't find any information in the context. Use three sentences maximum and keep the answer concise.
 
 Context retrieved for the last question:
 
