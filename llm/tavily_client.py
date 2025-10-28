@@ -3,9 +3,32 @@
 import os
 import logging
 import re
+from urllib.parse import urlparse
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_domain(url: str) -> str:
+    """
+    Извлекает домен из URL
+    
+    Args:
+        url: Полный URL
+        
+    Returns:
+        str: Домен (например, wikipedia.org)
+    """
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc or parsed.path
+        # Убираем 'www.' если есть
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        return domain
+    except Exception as e:
+        logger.error(f"Ошибка извлечения домена из URL {url}: {e}")
+        return "Неизвестный сайт"
 
 
 def _extract_sentences(text: str, max_sentences: int = 3) -> str:
@@ -84,17 +107,15 @@ async def search_with_tavily(query: str, max_results: int = 3) -> Optional[str]:
         results = []
         for i, result in enumerate(response.get('results', []), 1):
             title = result.get('title', 'Без названия')
-            content = result.get('content', 'Нет контента')
             url = result.get('url', '')
             
             logger.info(f"📄 Результат {i}: {title[:50]}...")
             
-            # Извлекаем первые 1-3 предложения
-            content_preview = _extract_sentences(content, max_sentences=3)
+            # Извлекаем домен из URL
+            domain = _extract_domain(url)
             
-            results.append(f"📄 {title}\n{content_preview}")
-            if url:
-                results.append(f"🔗 {url}")
+            # Формируем результат в новом формате
+            results.append(f"📄 {title}\n🌐 {domain}\n🔗 {url}")
             
             # Добавляем разделитель между результатами (кроме последнего)
             if i < min(len(response.get('results', [])), max_results):
