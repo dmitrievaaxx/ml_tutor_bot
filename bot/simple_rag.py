@@ -628,6 +628,7 @@ Context retrieved for the last question:
     def _clean_answer(self, answer: str) -> str:
         """
         Очищает ответ от лишних фраз "не нашел" если есть релевантный контент
+        и удаляет префиксы RAG системы, если они присутствуют
         
         Args:
             answer: Исходный ответ
@@ -637,6 +638,14 @@ Context retrieved for the last question:
         """
         if not answer:
             return answer
+        
+        # Удаляем префиксы RAG системы, если они есть в начале ответа
+        import re
+        answer = re.sub(r'^📄 Ответ RAG системы:\s*\n?', '', answer, flags=re.MULTILINE)
+        answer = re.sub(r'^Ответ RAG системы:\s*\n?', '', answer, flags=re.MULTILINE)
+        answer = re.sub(r'^📄 Ответ на основе документа:\s*\n?', '', answer, flags=re.MULTILINE)
+        answer = re.sub(r'^📄 Ответ на основе документа \(частично\):\s*\n?', '', answer, flags=re.MULTILINE)
+        answer = answer.strip()
         
         no_answer_phrases = ["не нашел ответа", "я не нашел"]
         answer_lower = answer.lower()
