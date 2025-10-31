@@ -1522,19 +1522,43 @@ async def handle_pdf_file(message: Message):
         if result['success']:
             # Сохраняем в базу данных
             metadata = result['metadata']
-            doc_id = db.add_document(
-                title=metadata.get('title', Path(file_name).stem),
-                content_preview=result['content_preview'],
-                file_type='pdf',
-                user_id=user_id,
-                file_size=document.file_size,
-                metadata=metadata,
-                arxiv_id=metadata.get('arxiv_id'),
-                authors=metadata.get('authors')
-            )
+            
+            try:
+                logger.info(f"[PDF] Сохраняю документ в БД: title='{metadata.get('title', '')[:50]}', preview_size={len(result.get('content_preview', ''))}")
+                
+                doc_id = db.add_document(
+                    title=metadata.get('title', Path(file_name).stem),
+                    content_preview=result['content_preview'],
+                    file_type='pdf',
+                    user_id=user_id,
+                    file_size=document.file_size,
+                    metadata=metadata,
+                    arxiv_id=metadata.get('arxiv_id'),
+                    authors=metadata.get('authors')
+                )
+                
+                logger.info(f"[PDF] Документ успешно сохранен: doc_id={doc_id}")
+                
+            except Exception as db_error:
+                logger.exception(f"[PDF] КРИТИЧЕСКАЯ ОШИБКА сохранения документа в БД: {db_error}")
+                
+                # Удаляем временный файл
+                if 'temp_path' in locals() and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                
+                await processing_msg.edit_text(
+                    "❌ Произошла ошибка при сохранении документа в базу данных.\n\n"
+                    "Файл обработан успешно, но не был сохранен. Попробуйте отправить файл еще раз."
+                )
+                return
             
             # Извлекаем темы из документа
-            topics = rag_system.extract_document_topics()
+            try:
+                topics = rag_system.extract_document_topics()
+                logger.info(f"[PDF] Извлечено тем: {len(topics) if topics else 0}")
+            except Exception as topics_error:
+                logger.error(f"[PDF] Ошибка извлечения тем (не критично): {topics_error}")
+                topics = None
             
             # Удаляем временный файл
             os.unlink(temp_path)

@@ -468,32 +468,88 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Удаляем старый документ пользователя (KISS принцип)
-        cursor.execute("DELETE FROM user_documents WHERE user_id = ?", (user_id,))
-        cursor.execute("DELETE FROM documents WHERE user_id = ?", (user_id,))
-        
-        metadata_json = json.dumps(metadata) if metadata else None
-        
-        cursor.execute("""
-            INSERT INTO documents (title, content_preview, file_type, file_size, 
-                                 user_id, metadata, arxiv_id, authors, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'processed')
-        """, (title, content_preview, file_type, file_size, user_id, 
-              metadata_json, arxiv_id, authors))
-        
-        doc_id = cursor.lastrowid
-        
-        # Link document to user
-        cursor.execute("""
-            INSERT INTO user_documents (user_id, document_id)
-            VALUES (?, ?)
-        """, (user_id, doc_id))
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Добавлен документ {title} для пользователя {user_id} (заменил старый)")
-        return doc_id
+        try:
+            # Удаляем старый документ пользователя (KISS принцип)
+            cursor.execute("DELETE FROM user_documents WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM documents WHERE user_id = ?", (user_id,))
+            
+            # Подготовка данных с валидацией
+            # 1. Ограничиваем размер content_preview (SQLite может иметь ограничения)
+            MAX_PREVIEW_SIZE = 50000  # Увеличенный лимит, но с защитой
+            if content_preview and len(content_preview) > MAX_PREVIEW_SIZE:
+                logger.warning(f"content_preview слишком большой ({len(content_preview)}), обрезаем до {MAX_PREVIEW_SIZE}")
+                content_preview = content_preview[:MAX_PREVIEW_SIZE]
+            
+            # 2. Сериализуем metadata с обработкой ошибок
+            metadata_json = None
+            if metadata:
+                try:
+                    metadata_json = json.dumps(metadata, ensure_ascii=False)
+                    # Проверяем размер JSON
+                    if len(metadata_json) > 50000:
+                        logger.warning(f"metadata JSON слишком большой ({len(metadata_json)}), упрощаем")
+                        # Создаем упрощенную версию metadata
+                        simplified_metadata = {
+                            'title': metadata.get('title', ''),
+                            'pages': metadata.get('pages', 0),
+                            'authors': metadata.get('authors', ''),
+                            'arxiv_id': metadata.get('arxiv_id', '')
+                        }
+                        metadata_json = json.dumps(simplified_metadata, ensure_ascii=False)
+                except Exception as json_error:
+                    logger.error(f"Ошибка сериализации metadata в JSON: {json_error}")
+                    logger.error(f"metadata содержимое: {str(metadata)[:200]}")
+                    metadata_json = None
+            
+            # 3. Валидация и нормализация данных
+            safe_title = str(title)[:500] if title else 'Untitled'  # Ограничиваем длину title
+            safe_authors = str(authors)[:1000] if authors else None  # Ограничиваем длину authors
+            safe_arxiv_id = str(arxiv_id)[:50] if arxiv_id else None  # Ограничиваем длину arxiv_id
+            safe_file_type = str(file_type)[:50] if file_type else 'pdf'
+            
+            # Проверяем типы
+            if file_size is not None and not isinstance(file_size, int):
+                try:
+                    file_size = int(file_size)
+                except (ValueError, TypeError):
+                    logger.warning(f"Некорректный file_size: {file_size}, устанавливаем None")
+                    file_size = None
+            
+            # Логируем только ключевую информацию (чтобы не превысить лимит Railway)
+            logger.info(f"Сохраняю документ: user_id={user_id}, title_len={len(safe_title)}, preview_len={len(content_preview) if content_preview else 0}, metadata_len={len(metadata_json) if metadata_json else 0}")
+            
+            cursor.execute("""
+                INSERT INTO documents (title, content_preview, file_type, file_size, 
+                                     user_id, metadata, arxiv_id, authors, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'processed')
+            """, (safe_title, content_preview, safe_file_type, file_size, user_id, 
+                  metadata_json, safe_arxiv_id, safe_authors))
+            
+            doc_id = cursor.lastrowid
+            
+            # Link document to user
+            cursor.execute("""
+                INSERT INTO user_documents (user_id, document_id)
+                VALUES (?, ?)
+            """, (user_id, doc_id))
+            
+            conn.commit()
+            
+            logger.info(f"Документ сохранен: id={doc_id}, user_id={user_id}")
+            return doc_id
+            
+        except sqlite3.Error as db_error:
+            conn.rollback()
+            logger.error(f"Ошибка SQLite при сохранении документа: {db_error}")
+            logger.error(f"Детали: title_len={len(str(title)) if title else 0}, preview_len={len(str(content_preview)) if content_preview else 0}")
+            raise
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Неожиданная ошибка при сохранении документа: {e}")
+            logger.exception("Полный стек ошибки:")
+            raise
+        finally:
+            conn.close()
     
     def get_user_document(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get current document for a user (KISS: only one document per user)"""
