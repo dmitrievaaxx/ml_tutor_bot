@@ -77,6 +77,11 @@ async def handle_start(message: Message):
     
     logger.info(f"Команда /start от пользователя {user_id} (@{username})")
     
+    # Если пользователь был в режиме анализа документа, выходим из него
+    if db.has_user_documents(user_id):
+        db.clear_user_documents(user_id)
+        logger.info(f"Пользователь {user_id} вышел из режима анализа документа через /start")
+    
     # Сохраняем текущий уровень перед очисткой диалога
     current_level = get_user_level_or_default(chat_id)
     
@@ -1493,16 +1498,26 @@ async def handle_pdf_file(message: Message):
         # Скачиваем файл
         bot = message.bot
         file = await bot.get_file(document.file_id)
+        logger.info(f"[PDF] Получены метаданные файла из Telegram: file_id={document.file_id}, file_unique_id={document.file_unique_id}, size={document.file_size}, mime={document.mime_type}, name='{file_name}', tg_path='{file.file_path}'")
         file_content = await bot.download_file(file.file_path)
         
         # Создаем временный файл
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
             temp_file.write(file_content.read())
             temp_path = temp_file.name
+        try:
+            temp_size = os.path.getsize(temp_path)
+        except Exception:
+            temp_size = -1
+        logger.info(f"[PDF] Временный файл создан: path='{temp_path}', size={temp_size} bytes")
         
         # Обрабатываем документ через простую RAG систему
+        logger.info("[PDF] Инициализирую SimpleRAG для обработки PDF...")
         rag_system = SimpleRAG()
+        logger.info("[PDF] SimpleRAG инициализирован")
+        logger.info(f"[PDF] Начинаю обработку документа: path='{temp_path}'")
         result = rag_system.process_pdf(temp_path)
+        logger.info(f"[PDF] Обработка завершена: success={result.get('success')}, pages={result.get('pages')}, chunks={result.get('chunks_count')}, metadata={result.get('metadata')}")
         
         if result['success']:
             # Сохраняем в базу данных
@@ -1550,6 +1565,7 @@ async def handle_pdf_file(message: Message):
         else:
             # Удаляем временный файл
             os.unlink(temp_path)
+            logger.error(f"[PDF] Ошибка обработки PDF (process_pdf вернул success=False): error='{result.get('error')}', user_id={user_id}, file_name='{file_name}', temp_path='{temp_path}'")
             
             await processing_msg.edit_text(
                 f"❌ **Ошибка обработки PDF:**\n\n{result['error']}\n\n"
@@ -1558,7 +1574,18 @@ async def handle_pdf_file(message: Message):
             )
         
     except Exception as e:
-        logger.error(f"Ошибка обработки PDF: {e}")
+        # Логируем максимально подробную информацию и стек
+        try:
+            err_file_size = getattr(document, 'file_size', None)
+            err_mime = getattr(document, 'mime_type', None)
+            err_temp = temp_path if 'temp_path' in locals() else None
+        except Exception:
+            err_file_size = None
+            err_mime = None
+            err_temp = None
+        logger.exception(
+            f"[PDF] Необработанное исключение при обработке PDF: user_id={user_id}, file_name='{file_name}', size={err_file_size}, mime={err_mime}, temp_path='{err_temp}'"
+        )
         await processing_msg.edit_text(
             "❌ Произошла ошибка при обработке PDF файла.\n\n"
             "Попробуйте отправить файл еще раз."
