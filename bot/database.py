@@ -474,13 +474,33 @@ class Database:
             cursor.execute("DELETE FROM documents WHERE user_id = ?", (user_id,))
             
             # Подготовка данных с валидацией
-            # 1. Ограничиваем размер content_preview (SQLite может иметь ограничения)
+            # 1. Очищаем content_preview от невалидных UTF-8 символов (surrogate pairs)
+            if content_preview:
+                try:
+                    # Декодируем и перекодируем, чтобы удалить невалидные символы
+                    content_preview = content_preview.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+                    # Удаляем surrogate pairs (кодовые точки 0xD800-0xDFFF)
+                    content_preview = ''.join(char for char in content_preview 
+                                            if not (0xD800 <= ord(char) <= 0xDFFF))
+                except Exception as encode_error:
+                    logger.warning(f"Ошибка очистки content_preview от невалидных символов: {encode_error}")
+                    # Fallback: используем encode/decode с errors='ignore'
+                    try:
+                        content_preview = content_preview.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                        # Также удаляем surrogate pairs в fallback
+                        content_preview = ''.join(char for char in content_preview 
+                                                if not (0xD800 <= ord(char) <= 0xDFFF))
+                    except Exception:
+                        logger.error("Критическая ошибка очистки content_preview, устанавливаем пустую строку")
+                        content_preview = ""
+            
+            # 2. Ограничиваем размер content_preview (SQLite может иметь ограничения)
             MAX_PREVIEW_SIZE = 50000  # Увеличенный лимит, но с защитой
             if content_preview and len(content_preview) > MAX_PREVIEW_SIZE:
                 logger.warning(f"content_preview слишком большой ({len(content_preview)}), обрезаем до {MAX_PREVIEW_SIZE}")
                 content_preview = content_preview[:MAX_PREVIEW_SIZE]
             
-            # 2. Сериализуем metadata с обработкой ошибок
+            # 3. Сериализуем metadata с обработкой ошибок
             metadata_json = None
             if metadata:
                 try:
@@ -501,11 +521,41 @@ class Database:
                     logger.error(f"metadata содержимое: {str(metadata)[:200]}")
                     metadata_json = None
             
-            # 3. Валидация и нормализация данных
-            safe_title = str(title)[:500] if title else 'Untitled'  # Ограничиваем длину title
-            safe_authors = str(authors)[:1000] if authors else None  # Ограничиваем длину authors
-            safe_arxiv_id = str(arxiv_id)[:50] if arxiv_id else None  # Ограничиваем длину arxiv_id
-            safe_file_type = str(file_type)[:50] if file_type else 'pdf'
+            # 4. Валидация и нормализация данных
+            # Функция для очистки строк от невалидных UTF-8 символов
+            def clean_utf8_string(s, max_len: int = None):
+                if s is None:
+                    return None
+                s = str(s)
+                if not s:
+                    return s
+                try:
+                    # Декодируем и перекодируем, чтобы удалить невалидные символы
+                    cleaned = s.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+                    # Удаляем surrogate pairs (кодовые точки 0xD800-0xDFFF)
+                    cleaned = ''.join(char for char in cleaned 
+                                    if not (0xD800 <= ord(char) <= 0xDFFF))
+                    if max_len:
+                        cleaned = cleaned[:max_len]
+                    return cleaned
+                except Exception:
+                    # Fallback: используем encode/decode с errors='ignore'
+                    try:
+                        cleaned = s.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                        # Также удаляем surrogate pairs в fallback
+                        cleaned = ''.join(char for char in cleaned 
+                                        if not (0xD800 <= ord(char) <= 0xDFFF))
+                        if max_len:
+                            cleaned = cleaned[:max_len]
+                        return cleaned
+                    except Exception:
+                        # В крайнем случае возвращаем пустую строку
+                        return "" if max_len else ""
+            
+            safe_title = clean_utf8_string(title if title else 'Untitled', 500)
+            safe_authors = clean_utf8_string(authors, 1000)
+            safe_arxiv_id = clean_utf8_string(arxiv_id, 50)
+            safe_file_type = clean_utf8_string(file_type if file_type else 'pdf', 50)
             
             # Проверяем типы
             if file_size is not None and not isinstance(file_size, int):
